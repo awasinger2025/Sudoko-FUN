@@ -30,6 +30,46 @@
   *::-webkit-scrollbar-track { background: transparent; }
   *::-webkit-scrollbar-thumb { background: #e4e4e7; border-radius: 8px; border: 2px solid #fafafa; }
   *::-webkit-scrollbar-thumb:hover { background: #d4d4d8; }
+
+  .sudoku-columns {
+    display: flex;
+    gap: 28px;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+    max-width: 1220px;
+    width: 100%;
+    margin: 0 auto;
+    box-sizing: border-box;
+  }
+  .col-left {
+    width: 230px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .col-center {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .col-right {
+    width: 320px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  /* Below 1180px, collapse to single column with the board on top */
+  @media (max-width: 1200px) {
+    .col-center { order: -1; width: 100%; }
+    .col-left, .col-right { flex: 0 1 320px; }
+  }
+  @media (max-width: 640px) {
+    .col-left, .col-right { width: 100%; max-width: 380px; flex: 1 1 auto; }
+  }
 </style>
 </head>
 <body>
@@ -1434,7 +1474,6 @@ function SudokuTrainer() {
               }}>{d}</button>
             );
           })}
-          <div style={{ marginLeft: 12, padding: "9px 18px", background: CL.surface, border: "1px solid " + CL.border, borderRadius: 10, fontVariantNumeric: "tabular-nums", fontSize: 18, fontWeight: 700, minWidth: 78, textAlign: "center", color: CL.text, letterSpacing: "-0.3px" }}>{fmt(timer)}</div>
         </div>
       )}
 
@@ -1551,8 +1590,73 @@ function SudokuTrainer() {
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 32, flexWrap: "wrap", justifyContent: "center", alignItems: "flex-start", maxWidth: 1020, width: "100%" }}>
-        <div>
+      <div className="sudoku-columns">
+        {/* LEFT COLUMN: Tools + Settings + Keyboard Shortcuts */}
+        <div className="col-left">
+          <div style={{ background: CL.surface, borderRadius: 14, padding: 16, border: "1px solid " + CL.border, boxShadow: "0 1px 2px rgba(24,24,27,0.03)" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: CL.textMuted, marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.6 }}>Tools</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <button onClick={function () { setPencilMode(function (p) { return !p; }); }} style={{
+                padding: "10px 12px", borderRadius: 10, border: "1.5px solid " + (pencilMode ? CL.primary : CL.border),
+                background: pencilMode ? CL.primaryDim : CL.surface, color: pencilMode ? CL.primaryLight : CL.text,
+                cursor: "pointer", fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "space-between",
+              }}>
+                <span>{"Pencil" + (pencilMode ? " ON" : "")}</span>
+                <span style={{ fontSize: 10, background: CL.surfaceLight, padding: "2px 6px", borderRadius: 5, color: CL.textMuted, fontWeight: 600, border: "1px solid " + CL.border }}>P</span>
+              </button>
+              <button onClick={eraseCell} style={{
+                padding: "10px 12px", borderRadius: 10, border: "1.5px solid " + CL.border, background: CL.surface, color: CL.text,
+                cursor: "pointer", fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "space-between",
+              }}>
+                <span>Erase</span>
+                <span style={{ fontSize: 10, background: CL.surfaceLight, padding: "2px 6px", borderRadius: 5, color: CL.textMuted, fontWeight: 600, border: "1px solid " + CL.border }}>Del</span>
+              </button>
+              <button onClick={undo} style={{
+                padding: "10px 12px", borderRadius: 10, border: "1.5px solid " + CL.border, background: CL.surface, color: CL.text,
+                cursor: "pointer", fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "space-between",
+              }}>
+                <span>Undo</span>
+                <span style={{ fontSize: 10, background: CL.surfaceLight, padding: "2px 6px", borderRadius: 5, color: CL.textMuted, fontWeight: 600, border: "1px solid " + CL.border }}>{"\u2318Z"}</span>
+              </button>
+              <button onClick={requestHint} style={{
+                padding: "10px 12px", borderRadius: 10, border: "1.5px solid " + CL.border, background: CL.surface, color: CL.text,
+                cursor: "pointer", fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "space-between",
+              }}>
+                <span>Hint</span>
+                <span style={{ fontSize: 10, background: CL.surfaceLight, padding: "2px 6px", borderRadius: 5, color: CL.textMuted, fontWeight: 600, border: "1px solid " + CL.border }}>H</span>
+              </button>
+              <button onClick={fillAllCandidates} style={{
+                padding: "10px 12px", borderRadius: 10, border: "1.5px solid " + CL.border, background: CL.surface, color: CL.text,
+                cursor: "pointer", fontSize: 14, fontWeight: 600, textAlign: "left",
+              }}>Fill Candidates</button>
+            </div>
+          </div>
+
+          <div style={{ background: CL.surface, borderRadius: 14, padding: 16, border: "1px solid " + CL.border, boxShadow: "0 1px 2px rgba(24,24,27,0.03)" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: CL.textMuted, marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.6 }}>Settings</div>
+            <label style={{ display: "flex", alignItems: "center", gap: 10, color: CL.text, cursor: "pointer", fontSize: 14, fontWeight: 500, padding: "6px 0" }}>
+              <input type="checkbox" checked={autoCheck} onChange={function () { setAutoCheck(function (a) { return !a; }); }} style={{ accentColor: CL.primary, width: 16, height: 16 }} />Auto-check
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 10, color: CL.text, cursor: "pointer", fontSize: 14, fontWeight: 500, padding: "6px 0" }}>
+              <input type="checkbox" checked={showCandidates} onChange={function () { setShowCandidates(function (s) { return !s; }); }} style={{ accentColor: CL.primary, width: 16, height: 16 }} />Show candidates
+            </label>
+          </div>
+
+          <div style={{ background: CL.surface, borderRadius: 14, padding: 16, border: "1px solid " + CL.border, boxShadow: "0 1px 2px rgba(24,24,27,0.03)" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: CL.textMuted, marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.6 }}>Keyboard Shortcuts</div>
+            {[["1-9", "Place number"], ["\u2190\u2191\u2192\u2193", "Navigate"], ["P", "Pencil mode"], ["H", "Get hint"], ["Del", "Erase"], ["\u2318Z", "Undo"]].map(function (pair) {
+              return (
+                <div key={pair[0]} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, padding: "5px 0", color: CL.textMuted }}>
+                  <span style={{ background: CL.surfaceLight, padding: "3px 9px", borderRadius: 6, fontFamily: "'SF Mono', Menlo, Monaco, Consolas, monospace", fontSize: 11, color: CL.textDim, fontWeight: 600, border: "1px solid " + CL.border }}>{pair[0]}</span>
+                  <span>{pair[1]}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* CENTER COLUMN: Board + Number Pad */}
+        <div className="col-center">
           {/* BOARD */}
           <div style={{ display: "inline-grid", gridTemplateColumns: "repeat(9,1fr)", gap: 0, border: "1.5px solid " + CL.borderThick, borderRadius: 14, overflow: "hidden", background: CL.border, boxShadow: "0 1px 2px rgba(24,24,27,0.04), 0 8px 24px -8px rgba(24,24,27,0.08)" }}>
             {board.map(function (row, r) {
@@ -1619,39 +1723,12 @@ function SudokuTrainer() {
             })}
           </div>
 
-          {/* ACTIONS */}
-          <div style={{ display: "flex", gap: 8, marginTop: 14, justifyContent: "center", flexWrap: "wrap" }}>
-            <button onClick={function () { setPencilMode(function (p) { return !p; }); }} style={{ padding: "9px 14px", borderRadius: 10, border: "1.5px solid " + (pencilMode ? CL.primary : CL.border), background: pencilMode ? CL.primaryDim : CL.surface, color: pencilMode ? CL.primaryLight : CL.textDim, cursor: "pointer", fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-              {"Pencil" + (pencilMode ? " ON" : "")} <span style={{ fontSize: 10, background: CL.surfaceLight, padding: "2px 5px", borderRadius: 4, color: CL.textMuted, fontWeight: 600 }}>P</span>
-            </button>
-            <button onClick={eraseCell} style={{ padding: "9px 14px", borderRadius: 10, border: "1.5px solid " + CL.border, background: CL.surface, color: CL.textDim, cursor: "pointer", fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-              Erase <span style={{ fontSize: 10, background: CL.surfaceLight, padding: "2px 5px", borderRadius: 4, color: CL.textMuted, fontWeight: 600 }}>Del</span>
-            </button>
-            <button onClick={undo} style={{ padding: "9px 14px", borderRadius: 10, border: "1.5px solid " + CL.border, background: CL.surface, color: CL.textDim, cursor: "pointer", fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-              Undo <span style={{ fontSize: 10, background: CL.surfaceLight, padding: "2px 5px", borderRadius: 4, color: CL.textMuted, fontWeight: 600 }}>Ctrl+Z</span>
-            </button>
-            <button onClick={requestHint} style={{ padding: "9px 14px", borderRadius: 10, border: "1.5px solid " + CL.border, background: CL.surface, color: CL.textDim, cursor: "pointer", fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-              Hint <span style={{ fontSize: 10, background: CL.surfaceLight, padding: "2px 5px", borderRadius: 4, color: CL.textMuted, fontWeight: 600 }}>H</span>
-            </button>
-            <button onClick={fillAllCandidates} style={{ padding: "9px 14px", borderRadius: 10, border: "1.5px solid " + CL.border, background: CL.surface, color: CL.textDim, cursor: "pointer", fontSize: 14, fontWeight: 600 }}>
-              Fill Candidates
-            </button>
-          </div>
-
-          <div style={{ display: "flex", gap: 20, marginTop: 14, justifyContent: "center", fontSize: 14 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, color: CL.textDim, cursor: "pointer", fontWeight: 500 }}>
-              <input type="checkbox" checked={autoCheck} onChange={function () { setAutoCheck(function (a) { return !a; }); }} style={{ accentColor: CL.primary, width: 16, height: 16 }} />Auto-check
-            </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, color: CL.textDim, cursor: "pointer", fontWeight: 500 }}>
-              <input type="checkbox" checked={showCandidates} onChange={function () { setShowCandidates(function (s) { return !s; }); }} style={{ accentColor: CL.primary, width: 16, height: 16 }} />Show candidates
-            </label>
-          </div>
         </div>
 
-        {/* RIGHT PANEL */}
-        <div style={{ width: 320, minWidth: 280 }}>
+        {/* RIGHT COLUMN: Hint + Session Stats + Encyclopedia */}
+        <div className="col-right">
           {currentHint && (
-            <div style={{ background: CL.hintDim, border: "1.5px solid " + CL.hint, borderRadius: 14, padding: 16, marginBottom: 14 }}>
+            <div style={{ background: CL.hintDim, border: "1.5px solid " + CL.hint, borderRadius: 14, padding: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: CL.hint, textTransform: "uppercase", letterSpacing: 0.5 }}>{"Hint: " + currentHint.type}</span>
                 {currentHint.difficulty && (
@@ -1681,8 +1758,13 @@ function SudokuTrainer() {
             </div>
           )}
 
-          <div style={{ background: CL.surface, borderRadius: 14, padding: 18, marginBottom: 14, border: "1px solid " + CL.border, boxShadow: "0 1px 2px rgba(24,24,27,0.03)" }}>
-            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, letterSpacing: "-0.2px" }}>Session Stats</div>
+          <div style={{ background: CL.surface, borderRadius: 14, padding: 18, border: "1px solid " + CL.border, boxShadow: "0 1px 2px rgba(24,24,27,0.03)" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: CL.textMuted, marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.6 }}>Session Stats</div>
+            {/* Timer (prominent, top) */}
+            <div style={{ textAlign: "center", padding: "12px 0 16px", borderBottom: "1px solid " + CL.border, marginBottom: 14 }}>
+              <div style={{ fontSize: 44, fontWeight: 800, color: CL.text, fontVariantNumeric: "tabular-nums", letterSpacing: "-1.5px", lineHeight: 1 }}>{fmt(timer)}</div>
+              <div style={{ fontSize: 12, color: CL.textMuted, marginTop: 6, fontWeight: 500, textTransform: "uppercase", letterSpacing: 0.5 }}>Elapsed Time</div>
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div style={{ textAlign: "center" }}><div style={{ fontSize: 26, fontWeight: 700, color: CL.warning, fontVariantNumeric: "tabular-nums" }}>{hintsUsed}</div><div style={{ fontSize: 12, color: CL.textMuted, marginTop: 2, fontWeight: 500 }}>Hints</div></div>
               <div style={{ textAlign: "center" }}><div style={{ fontSize: 26, fontWeight: 700, color: CL.success, fontVariantNumeric: "tabular-nums" }}>{board.flat().filter(function (v) { return v !== 0; }).length + "/81"}</div><div style={{ fontSize: 12, color: CL.textMuted, marginTop: 2, fontWeight: 500 }}>Filled</div></div>
@@ -1702,7 +1784,7 @@ function SudokuTrainer() {
           <button onClick={function () { setShowTechniques(function (s) { return !s; }); }} style={{
             width: "100%", padding: "13px 16px", borderRadius: 12, border: "1px solid " + CL.border,
             background: CL.surface, color: CL.text, cursor: "pointer", fontSize: 14, fontWeight: 600,
-            textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14,
+            textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center",
             boxShadow: "0 1px 2px rgba(24,24,27,0.03)",
           }}>
             <span>{"Technique Encyclopedia (" + TECHNIQUES.length + ")"}</span>
@@ -1731,19 +1813,6 @@ function SudokuTrainer() {
             </div>
           )}
 
-          {!showTechniques && (
-            <div style={{ background: CL.surface, borderRadius: 14, padding: 18, border: "1px solid " + CL.border, boxShadow: "0 1px 2px rgba(24,24,27,0.03)" }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: CL.textDim, marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.5 }}>Keyboard Shortcuts</div>
-              {[["1-9", "Place number"], ["\u2190\u2191\u2192\u2193", "Navigate"], ["P", "Pencil mode"], ["H", "Get hint"], ["Del", "Erase"], ["\u2318Z", "Undo"]].map(function (pair) {
-                return (
-                  <div key={pair[0]} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, padding: "5px 0", color: CL.textMuted }}>
-                    <span style={{ background: CL.surfaceLight, padding: "3px 9px", borderRadius: 6, fontFamily: "'SF Mono', Menlo, Monaco, Consolas, monospace", fontSize: 11, color: CL.textDim, fontWeight: 600, border: "1px solid " + CL.border }}>{pair[0]}</span>
-                    <span>{pair[1]}</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </div>
       </div>
     </div>

@@ -1097,10 +1097,424 @@ var CL = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// QUARTILES GAME (word-puzzle side mode)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Curated puzzles, one per difficulty. Each has 20 unique tiles, 5 hidden
+// quartiles (4-tile words), plus shorter and bonus 4-tile combinations.
+const QUARTILES_PUZZLES = {
+  novice: {
+    id: "novice-01",
+    theme: "Everyday Words",
+    tiles: [
+      "SUR",  "PRI",  "SING", "LY",
+      "HAP",  "PI",   "NES",  "S",
+      "REM",  "EM",   "BER",  "ED",
+      "DIS",  "COV",  "ER",   "Y",
+      "IN",   "VI",   "TA",   "TION",
+    ],
+    quartiles: [
+      ["SUR", "PRI", "SING", "LY"],   // SURPRISINGLY
+      ["HAP", "PI", "NES", "S"],      // HAPPINESS
+      ["REM", "EM", "BER", "ED"],     // REMEMBERED
+      ["DIS", "COV", "ER", "Y"],      // DISCOVERY
+      ["IN", "VI", "TA", "TION"],     // INVITATION
+    ],
+    words: {
+      // 1-tile
+      "IN":            ["IN"],
+      "SING":          ["SING"],
+      "PI":            ["PI"],
+      // 2-tile
+      "SINGER":        ["SING", "ER"],
+      "COVER":         ["COV", "ER"],
+      "EMBER":         ["EM", "BER"],
+      "EMS":           ["EM", "S"],
+      "INS":           ["IN", "S"],
+      "DISS":          ["DIS", "S"],
+      "VITA":          ["VI", "TA"],
+      "HAPS":          ["HAP", "S"],
+      // 3-tile
+      "SURPRISING":    ["SUR", "PRI", "SING"],
+      "REMEMBER":      ["REM", "EM", "BER"],
+      "DISCOVER":      ["DIS", "COV", "ER"],
+      "COVERED":       ["COV", "ER", "ED"],
+      "COVERS":        ["COV", "ER", "S"],
+      "EMBERS":        ["EM", "BER", "S"],
+      "HAPPILY":       ["HAP", "PI", "LY"],
+      "HAPPIER":       ["HAP", "PI", "ER"],
+      // 4-tile quartiles
+      "SURPRISINGLY":  ["SUR", "PRI", "SING", "LY"],
+      "HAPPINESS":     ["HAP", "PI", "NES", "S"],
+      "REMEMBERED":    ["REM", "EM", "BER", "ED"],
+      "DISCOVERY":     ["DIS", "COV", "ER", "Y"],
+      "INVITATION":    ["IN", "VI", "TA", "TION"],
+      // 4-tile bonus
+      "DISCOVERED":    ["DIS", "COV", "ER", "ED"],
+      "DISCOVERS":     ["DIS", "COV", "ER", "S"],
+      "REMEMBERS":     ["REM", "EM", "BER", "S"],
+    },
+  },
+
+  intermediate: {
+    id: "intermediate-01",
+    theme: "Everyday",
+    tiles: [
+      "UN",   "CA",    "PROF",  "RE",
+      "LU",   "ESS",   "DER",   "VO",
+      "IM",   "TION",  "COM",   "STAND",
+      "TED",  "PLI",   "BLE",   "AL",
+      "PO",   "ING",   "SSI",   "ION",
+    ],
+    quartiles: [
+      ["UN", "DER", "STAND", "ING"],    // UNDERSTANDING
+      ["COM", "PLI", "CA", "TED"],      // COMPLICATED
+      ["PROF", "ESS", "ION", "AL"],     // PROFESSIONAL
+      ["RE", "VO", "LU", "TION"],       // REVOLUTION
+      ["IM", "PO", "SSI", "BLE"],       // IMPOSSIBLE
+    ],
+    words: {
+      "STAND":        ["STAND"],
+      "UNDER":        ["UN", "DER"],
+      "STANDING":     ["STAND", "ING"],
+      "PROFESS":      ["PROF", "ESS"],
+      "REAL":         ["RE", "AL"],
+      "CARE":         ["CA", "RE"],
+      "LURE":         ["LU", "RE"],
+      "PORE":         ["PO", "RE"],
+      "COMING":       ["COM", "ING"],
+      "UNDERSTAND":   ["UN", "DER", "STAND"],
+      "PROFESSION":   ["PROF", "ESS", "ION"],
+      "POSSIBLE":     ["PO", "SSI", "BLE"],
+      "VOCATION":     ["VO", "CA", "TION"],
+      "UNDERSTANDING":["UN", "DER", "STAND", "ING"],
+      "COMPLICATED":  ["COM", "PLI", "CA", "TED"],
+      "PROFESSIONAL": ["PROF", "ESS", "ION", "AL"],
+      "REVOLUTION":   ["RE", "VO", "LU", "TION"],
+      "IMPOSSIBLE":   ["IM", "PO", "SSI", "BLE"],
+      "IMPLICATED":   ["IM", "PLI", "CA", "TED"],
+      "VOCATIONAL":   ["VO", "CA", "TION", "AL"],
+    },
+  },
+
+  expert: {
+    id: "expert-01",
+    theme: "Academic",
+    tiles: [
+      "META", "PHO",  "RIC",  "AL",
+      "IN",   "TRIN", "SIC",  "ALLY",
+      "CON",  "TEMP", "LA",   "TIVE",
+      "SYM",  "PA",   "THE",  "TIC",
+      "AR",   "CHAE", "O",    "LOGY",
+    ],
+    quartiles: [
+      ["META", "PHO", "RIC", "AL"],     // METAPHORICAL
+      ["IN", "TRIN", "SIC", "ALLY"],    // INTRINSICALLY
+      ["CON", "TEMP", "LA", "TIVE"],    // CONTEMPLATIVE
+      ["SYM", "PA", "THE", "TIC"],      // SYMPATHETIC
+      ["AR", "CHAE", "O", "LOGY"],      // ARCHAEOLOGY
+    ],
+    words: {
+      // 1-tile
+      "THE":           ["THE"],
+      "IN":            ["IN"],
+      "LA":            ["LA"],
+      "PA":            ["PA"],
+      // 2-tile
+      "OLOGY":         ["O", "LOGY"],
+      "PHOTIC":        ["PHO", "TIC"],
+      "OTIC":          ["O", "TIC"],
+      "LATHE":         ["LA", "THE"],
+      "THETIC":        ["THE", "TIC"],
+      // 3-tile
+      "METAPHORIC":    ["META", "PHO", "RIC"],
+      "INTRINSIC":     ["IN", "TRIN", "SIC"],
+      "PATHETIC":      ["PA", "THE", "TIC"],
+      // 4-tile quartiles
+      "METAPHORICAL":  ["META", "PHO", "RIC", "AL"],
+      "INTRINSICALLY": ["IN", "TRIN", "SIC", "ALLY"],
+      "CONTEMPLATIVE": ["CON", "TEMP", "LA", "TIVE"],
+      "SYMPATHETIC":   ["SYM", "PA", "THE", "TIC"],
+      "ARCHAEOLOGY":   ["AR", "CHAE", "O", "LOGY"],
+    },
+  },
+};
+
+function QuartilesGame() {
+  var CLq = {
+    bg: "#fafafa", surface: "#ffffff", surfaceLight: "#f4f4f5",
+    border: "#e4e4e7", borderThick: "#a1a1aa",
+    text: "#18181b", textDim: "#52525b", textMuted: "#a1a1aa",
+    primary: "#4f46e5", primaryLight: "#4338ca", primaryDim: "rgba(79,70,229,0.08)",
+    success: "#10b981", successDim: "rgba(16,185,129,0.10)",
+    error: "#ef4444", errorDim: "rgba(239,68,68,0.08)",
+    warning: "#f59e0b", warningDim: "rgba(245,158,11,0.10)",
+    hint: "#8b5cf6", hintDim: "rgba(139,92,246,0.10)",
+  };
+
+  var _level = useState("intermediate"); // "novice" | "intermediate" | "expert"
+  var level = _level[0], setLevel = _level[1];
+  var puzzle = QUARTILES_PUZZLES[level];
+  var _current = useState([]); // array of tile indices currently selected
+  var current = _current[0], setCurrent = _current[1];
+  var _foundByLevel = useState({ novice: [], intermediate: [], expert: [] });
+  var foundByLevel = _foundByLevel[0], setFoundByLevel = _foundByLevel[1];
+  var found = foundByLevel[level];
+  var _flash = useState(null); // "success" | "error" | null
+  var flash = _flash[0], setFlash = _flash[1];
+  var _message = useState("Tap tiles to build a word — 1, 2, 3, or 4 tiles.");
+  var message = _message[0], setMessage = _message[1];
+
+  // Build lookup: normalized tile sequence → word
+  var seqToWord = {};
+  Object.keys(puzzle.words).forEach(function (w) {
+    seqToWord[puzzle.words[w].join("|")] = w;
+  });
+  // Set of canonical quartile tile-sequences
+  var quartileSet = {};
+  puzzle.quartiles.forEach(function (q) { quartileSet[q.join("|")] = true; });
+
+  var foundWords = {};
+  found.forEach(function (f) { foundWords[f.word] = true; });
+
+  var toggleTile = function (idx) {
+    if (current.indexOf(idx) >= 0) {
+      // Deselect — remove from current chain (and anything after it)
+      var at = current.indexOf(idx);
+      setCurrent(current.slice(0, at));
+      return;
+    }
+    if (current.length >= 4) return;
+    setCurrent(current.concat([idx]));
+  };
+
+  var clearCurrent = function () { setCurrent([]); setMessage("Tap tiles to build a word — 1, 2, 3, or 4 tiles."); };
+
+  var submitWord = function () {
+    if (current.length === 0) return;
+    var seq = current.map(function (i) { return puzzle.tiles[i]; }).join("|");
+    var word = seqToWord[seq];
+    if (!word) {
+      setFlash("error"); setMessage("Not a valid word.");
+      setTimeout(function () { setFlash(null); }, 400);
+      return;
+    }
+    if (foundWords[word]) {
+      setFlash("error"); setMessage("Already found.");
+      setTimeout(function () { setFlash(null); }, 400);
+      return;
+    }
+    var tiles = puzzle.words[word];
+    var pts = tiles.length === 1 ? 1 : tiles.length === 2 ? 2 : tiles.length === 3 ? 5 : 10;
+    var isQuartile = !!quartileSet[seq];
+    var nextEntry = { word: word, tiles: tiles, points: pts, isQuartile: isQuartile };
+    setFoundByLevel(function (prev) {
+      var next = { novice: prev.novice.slice(), intermediate: prev.intermediate.slice(), expert: prev.expert.slice() };
+      next[level] = next[level].concat([nextEntry]);
+      return next;
+    });
+    setFlash("success");
+    setMessage(word + " — +" + pts + (isQuartile ? "  🏆 Quartile!" : ""));
+    setCurrent([]);
+    setTimeout(function () { setFlash(null); }, 500);
+  };
+
+  var totalScore = found.reduce(function (a, f) { return a + f.points; }, 0);
+  var quartilesFound = found.filter(function (f) { return f.isQuartile; }).length;
+
+  var resetGame = function () {
+    setCurrent([]);
+    setFoundByLevel(function (prev) {
+      var next = { novice: prev.novice.slice(), intermediate: prev.intermediate.slice(), expert: prev.expert.slice() };
+      next[level] = [];
+      return next;
+    });
+    setFlash(null);
+    setMessage("Tap tiles to build a word — 1, 2, 3, or 4 tiles.");
+  };
+
+  var changeLevel = function (newLevel) {
+    if (newLevel === level) return;
+    setLevel(newLevel);
+    setCurrent([]);
+    setFlash(null);
+    setMessage("Tap tiles to build a word — 1, 2, 3, or 4 tiles.");
+  };
+
+  return (
+    <div style={{ display: "flex", gap: 28, flexWrap: "wrap", justifyContent: "center", alignItems: "flex-start", maxWidth: 1100, width: "100%", margin: "0 auto" }}>
+      {/* LEFT COLUMN: score + controls */}
+      <div style={{ width: 240, display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ background: CLq.surface, borderRadius: 14, padding: 16, border: "1px solid " + CLq.border, boxShadow: "0 1px 2px rgba(24,24,27,0.03)" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: CLq.textMuted, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.6 }}>{level.charAt(0).toUpperCase() + level.slice(1) + " · " + puzzle.theme}</div>
+          <div style={{ fontSize: 36, fontWeight: 800, color: CLq.primaryLight, fontVariantNumeric: "tabular-nums" }}>{totalScore}</div>
+          <div style={{ fontSize: 12, color: CLq.textMuted, marginTop: 4 }}>{"Words found: " + found.length}</div>
+          <div style={{ fontSize: 12, color: CLq.hint, marginTop: 2, fontWeight: 600 }}>{"Quartiles: " + quartilesFound + " / 5"}</div>
+        </div>
+
+        <div style={{ background: CLq.surface, borderRadius: 14, padding: 16, border: "1px solid " + CLq.border }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: CLq.textMuted, marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.6 }}>Scoring</div>
+          <div style={{ fontSize: 12, color: CLq.textDim, lineHeight: 1.6 }}>
+            <div>1 tile &nbsp;= &nbsp;1 pt</div>
+            <div>2 tiles &nbsp;= &nbsp;2 pts</div>
+            <div>3 tiles &nbsp;= &nbsp;5 pts</div>
+            <div style={{ color: CLq.hint, fontWeight: 700 }}>4 tiles = 10 pts 🏆</div>
+          </div>
+        </div>
+
+        <button onClick={resetGame} style={{
+          padding: "10px 12px", borderRadius: 10, border: "1.5px solid " + CLq.border, background: CLq.surface, color: CLq.text,
+          cursor: "pointer", fontSize: 13, fontWeight: 600,
+        }}>Reset puzzle</button>
+      </div>
+
+      {/* CENTER: tile grid + current word + submit */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+        {/* Level switcher */}
+        <div style={{ display: "flex", gap: 4, background: CLq.surface, borderRadius: 12, padding: 4, border: "1px solid " + CLq.border, boxShadow: "0 1px 2px rgba(24,24,27,0.03)" }}>
+          {[
+            { id: "novice", label: "Novice" },
+            { id: "intermediate", label: "Intermediate" },
+            { id: "expert", label: "Expert" },
+          ].map(function (lv) {
+            var active = level === lv.id;
+            return (
+              <button key={lv.id} onClick={function () { changeLevel(lv.id); }} style={{
+                padding: "8px 18px", borderRadius: 9, border: "none", cursor: "pointer",
+                fontSize: 13, fontWeight: 700, transition: "all 0.15s",
+                background: active ? CLq.primary : "transparent",
+                color: active ? "#fff" : CLq.textDim,
+              }}>{lv.label}</button>
+            );
+          })}
+        </div>
+
+        {/* Current word builder */}
+        <div style={{
+          minHeight: 56, minWidth: 400, padding: "10px 14px", borderRadius: 12,
+          border: "1.5px solid " + (flash === "success" ? CLq.success : flash === "error" ? CLq.error : CLq.border),
+          background: flash === "success" ? CLq.successDim : flash === "error" ? CLq.errorDim : CLq.surface,
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 8, flexWrap: "wrap",
+          transition: "all 0.15s",
+        }}>
+          {current.length === 0 ? (
+            <span style={{ fontSize: 13, color: CLq.textMuted, fontStyle: "italic" }}>{message}</span>
+          ) : (
+            current.map(function (idx, i) {
+              return (
+                <span key={i} style={{
+                  padding: "6px 10px", borderRadius: 8, background: CLq.primaryDim, color: CLq.primaryLight,
+                  fontWeight: 700, fontSize: 18, letterSpacing: "0.5px",
+                }}>{puzzle.tiles[idx]}</span>
+              );
+            })
+          )}
+        </div>
+
+        {/* 5x4 Tile Grid */}
+        <div style={{
+          display: "grid", gridTemplateColumns: "repeat(4, 112px)", gap: 10,
+          padding: 12, borderRadius: 16, background: CLq.surfaceLight,
+          border: "1px solid " + CLq.border, boxShadow: "0 1px 2px rgba(24,24,27,0.04), 0 8px 24px -8px rgba(24,24,27,0.08)",
+        }}>
+          {puzzle.tiles.map(function (tile, i) {
+            var selectedPos = current.indexOf(i);
+            var isSelected = selectedPos >= 0;
+            return (
+              <button key={i} onClick={function () { toggleTile(i); }} style={{
+                height: 72, borderRadius: 12, cursor: "pointer",
+                border: "1.5px solid " + (isSelected ? CLq.primary : CLq.border),
+                background: isSelected ? CLq.primaryDim : CLq.surface,
+                color: isSelected ? CLq.primaryLight : CLq.text,
+                fontSize: tile.length > 4 ? 18 : 22, fontWeight: 800, letterSpacing: "0.5px",
+                position: "relative", transition: "all 0.12s",
+              }}>
+                {tile}
+                {isSelected && (
+                  <span style={{
+                    position: "absolute", top: 4, right: 6, fontSize: 10, fontWeight: 700,
+                    color: CLq.primaryLight,
+                  }}>{selectedPos + 1}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Action buttons */}
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={clearCurrent} disabled={current.length === 0} style={{
+            padding: "10px 20px", borderRadius: 10, border: "1.5px solid " + CLq.border,
+            background: CLq.surface, color: current.length ? CLq.text : CLq.textMuted,
+            cursor: current.length ? "pointer" : "default", fontSize: 14, fontWeight: 600,
+          }}>Clear</button>
+          <button onClick={submitWord} disabled={current.length === 0} style={{
+            padding: "10px 28px", borderRadius: 10, border: "1.5px solid " + CLq.primary,
+            background: current.length ? CLq.primary : CLq.surface,
+            color: current.length ? "#fff" : CLq.textMuted,
+            cursor: current.length ? "pointer" : "default", fontSize: 14, fontWeight: 700,
+          }}>Submit</button>
+        </div>
+      </div>
+
+      {/* RIGHT COLUMN: Found words + quartile tracker */}
+      <div style={{ width: 260, display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ background: CLq.surface, borderRadius: 14, padding: 16, border: "1px solid " + CLq.border }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: CLq.textMuted, marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.6 }}>Quartiles Tracker</div>
+          {puzzle.quartiles.map(function (q, i) {
+            var seq = q.join("|");
+            var foundQ = found.find(function (f) { return f.tiles.join("|") === seq; });
+            return (
+              <div key={i} style={{
+                padding: "8px 10px", borderRadius: 8, marginBottom: 6,
+                border: "1px solid " + (foundQ ? CLq.hint : CLq.border),
+                background: foundQ ? CLq.hintDim : CLq.surfaceLight,
+                fontSize: 13, fontWeight: 700,
+                color: foundQ ? CLq.hint : CLq.textMuted,
+              }}>
+                {foundQ ? foundQ.word : "— — — —"}
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ background: CLq.surface, borderRadius: 14, padding: 16, border: "1px solid " + CLq.border }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: CLq.textMuted, marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.6 }}>{"Found (" + found.length + ")"}</div>
+          {found.length === 0 ? (
+            <div style={{ fontSize: 12, color: CLq.textMuted, fontStyle: "italic" }}>No words yet — start building!</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 280, overflowY: "auto" }}>
+              {found.slice().reverse().map(function (f, i) {
+                return (
+                  <div key={i} style={{
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    padding: "6px 8px", borderRadius: 6,
+                    background: f.isQuartile ? CLq.hintDim : "transparent",
+                    border: f.isQuartile ? "1px solid " + CLq.hint : "1px solid transparent",
+                  }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: f.isQuartile ? CLq.hint : CLq.text }}>
+                      {f.word}{f.isQuartile && " 🏆"}
+                    </span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: CLq.textMuted }}>{"+" + f.points}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function SudokuTrainer() {
+  // Top-level game switcher: "sudoku" or "quartiles"
+  var _appGame = useState("sudoku");
+  var appGame = _appGame[0], setAppGame = _appGame[1];
   var initData = useMemo(function () { return generatePuzzle("medium"); }, []);
   var _difficulty = useState("medium");
   var difficulty = _difficulty[0], setDifficulty = _difficulty[1];
@@ -1472,12 +1886,27 @@ function SudokuTrainer() {
   return (
     <div style={{ minHeight: "100vh", background: CL.bg, color: CL.text, fontFamily: "'Inter',-apple-system,sans-serif", display: "flex", flexDirection: "column", alignItems: "center", padding: "28px 16px 40px", boxSizing: "border-box" }}>
       {/* Header */}
-      <div style={{ textAlign: "center", marginBottom: 18 }}>
+      <div style={{ textAlign: "center", marginBottom: 14 }}>
         <h1 style={{ fontSize: 32, fontWeight: 800, margin: 0, letterSpacing: "2px", color: CL.primaryLight }}>
-          SUDOKU
+          {appGame === "quartiles" ? "QUARTILES" : "SUDOKU"}
         </h1>
       </div>
 
+      {/* Top-level Game Switcher (Sudoku / Quartiles) */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 18, background: CL.surface, borderRadius: 12, padding: 4, border: "1px solid " + CL.border, boxShadow: "0 1px 2px rgba(24,24,27,0.03)" }}>
+        <button onClick={function () { setAppGame("sudoku"); }} style={{
+          padding: "9px 22px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, transition: "all 0.15s",
+          background: appGame === "sudoku" ? CL.primary : "transparent", color: appGame === "sudoku" ? "#fff" : CL.textDim,
+        }}>Sudoku</button>
+        <button onClick={function () { setAppGame("quartiles"); setRunning(false); }} style={{
+          padding: "9px 22px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, transition: "all 0.15s",
+          background: appGame === "quartiles" ? CL.primary : "transparent", color: appGame === "quartiles" ? "#fff" : CL.textDim,
+        }}>Quartiles</button>
+      </div>
+
+      {appGame === "quartiles" && <QuartilesGame />}
+
+      {appGame === "sudoku" && (<React.Fragment>
       {/* Mode Switcher */}
       <div style={{ display: "flex", gap: 4, marginBottom: 20, background: CL.surface, borderRadius: 12, padding: 4, border: "1px solid " + CL.border, boxShadow: "0 1px 2px rgba(24,24,27,0.03)" }}>
         <button onClick={function () { setMode("freeplay"); setPracticePhase("select"); setCurrentHint(null); }} style={{
@@ -1907,6 +2336,7 @@ function SudokuTrainer() {
 
         </div>
       </div>
+      </React.Fragment>)}
     </div>
   );
 }

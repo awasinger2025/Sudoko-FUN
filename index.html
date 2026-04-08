@@ -1,0 +1,1738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sudoku Trainer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  html, body { margin: 0; padding: 0; background: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  #root { min-height: 100vh; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useCallback, useRef, useMemo } = React;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SUDOKU ENGINE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function shuffleArray(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function isValidPlacement(board, row, col, num) {
+  for (let i = 0; i < 9; i++) {
+    if (board[row][i] === num && i !== col) return false;
+    if (board[i][col] === num && i !== row) return false;
+  }
+  const br = Math.floor(row / 3) * 3, bc = Math.floor(col / 3) * 3;
+  for (let r = br; r < br + 3; r++)
+    for (let c = bc; c < bc + 3; c++)
+      if (board[r][c] === num && (r !== row || c !== col)) return false;
+  return true;
+}
+
+function generateFullBoard() {
+  const board = Array.from({ length: 9 }, () => Array(9).fill(0));
+  function fill(pos) {
+    if (pos === 81) return true;
+    const r = Math.floor(pos / 9), c = pos % 9;
+    for (const n of shuffleArray([1,2,3,4,5,6,7,8,9])) {
+      if (isValidPlacement(board, r, c, n)) {
+        board[r][c] = n;
+        if (fill(pos + 1)) return true;
+        board[r][c] = 0;
+      }
+    }
+    return false;
+  }
+  fill(0);
+  return board;
+}
+
+function generatePuzzle(difficulty) {
+  const solution = generateFullBoard();
+  const puzzle = solution.map(r => [...r]);
+  const remove = { easy: 36, medium: 46, hard: 52, expert: 58 }[difficulty] || 46;
+  const positions = shuffleArray(Array.from({ length: 81 }, (_, i) => [Math.floor(i / 9), i % 9]));
+  let removed = 0;
+  for (const [r, c] of positions) {
+    if (removed >= remove) break;
+    puzzle[r][c] = 0;
+    removed++;
+  }
+  return { puzzle, solution };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PENCIL MARK HELPERS (using plain objects instead of Sets)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function emptyMarks() {
+  return Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => ({})));
+}
+
+function cloneMarks(marks) {
+  return marks.map(row => row.map(cell => ({ ...cell })));
+}
+
+function hasMark(marks, r, c, n) {
+  return marks[r][c][n] === true;
+}
+
+function toggleMark(marks, r, c, n) {
+  const next = cloneMarks(marks);
+  if (next[r][c][n]) { delete next[r][c][n]; } else { next[r][c][n] = true; }
+  return next;
+}
+
+function deleteMark(marks, r, c, n) {
+  const next = cloneMarks(marks);
+  delete next[r][c][n];
+  return next;
+}
+
+function clearCell(marks, r, c) {
+  const next = cloneMarks(marks);
+  next[r][c] = {};
+  return next;
+}
+
+function getMarkList(marks, r, c) {
+  return Object.keys(marks[r][c]).map(Number).sort((a, b) => a - b);
+}
+
+function markCount(marks, r, c) {
+  return Object.keys(marks[r][c]).length;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CANDIDATE CALCULATOR
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function getCandidates(board, row, col) {
+  if (board[row][col] !== 0) return [];
+  const used = {};
+  for (let i = 0; i < 9; i++) { if (board[row][i]) used[board[row][i]] = true; if (board[i][col]) used[board[i][col]] = true; }
+  const br = Math.floor(row / 3) * 3, bc = Math.floor(col / 3) * 3;
+  for (let r = br; r < br + 3; r++) for (let cc = bc; cc < bc + 3; cc++) if (board[r][cc]) used[board[r][cc]] = true;
+  const result = [];
+  for (let n = 1; n <= 9; n++) if (!used[n]) result.push(n);
+  return result;
+}
+
+function getAllCandidates(board) {
+  return board.map((row, r) => row.map((_, c) => getCandidates(board, r, c)));
+}
+
+function boxOf(r, c) { return Math.floor(r / 3) * 3 + Math.floor(c / 3); }
+function boxCells(boxIdx) {
+  const br = Math.floor(boxIdx / 3) * 3, bc = (boxIdx % 3) * 3;
+  const cells = [];
+  for (let r = br; r < br + 3; r++) for (let c = bc; c < bc + 3; c++) cells.push([r, c]);
+  return cells;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TECHNIQUE DETECTORS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const HL = { trigger: "#6366f1", target: "#22c55e", eliminate: "#ef4444", related: "#f59e0b" };
+
+function getUnits() {
+  const units = [];
+  for (let i = 0; i < 9; i++) {
+    units.push({ name: "row " + (i + 1), cells: Array.from({ length: 9 }, (_, c) => [i, c]) });
+    units.push({ name: "column " + (i + 1), cells: Array.from({ length: 9 }, (_, r) => [r, i]) });
+    units.push({ name: "box " + (i + 1), cells: boxCells(i) });
+  }
+  return units;
+}
+
+function findNakedSingle(board, cands) {
+  for (let r = 0; r < 9; r++)
+    for (let c = 0; c < 9; c++)
+      if (cands[r][c].length === 1) {
+        const v = cands[r][c][0];
+        return {
+          type: "Naked Single", difficulty: "Beginner",
+          explanation: "R" + (r + 1) + "C" + (c + 1) + " has only one candidate left: " + v + ". All other digits are in its row, column, or box.",
+          highlights: [{ r: r, c: c, color: HL.target }], eliminations: [], placements: [{ r: r, c: c, value: v }],
+        };
+      }
+  return null;
+}
+
+function findHiddenSingle(board, cands) {
+  var units = getUnits();
+  for (var u = 0; u < units.length; u++) {
+    var unit = units[u];
+    for (var n = 1; n <= 9; n++) {
+      var positions = unit.cells.filter(function (p) { return cands[p[0]][p[1]].indexOf(n) >= 0; });
+      if (positions.length === 1) {
+        var r = positions[0][0], c = positions[0][1];
+        var others = unit.cells.filter(function (p) { return (p[0] !== r || p[1] !== c) && board[p[0]][p[1]] === 0; });
+        return {
+          type: "Hidden Single", difficulty: "Beginner",
+          explanation: "In " + unit.name + ", digit " + n + " can only go in R" + (r + 1) + "C" + (c + 1) + ".",
+          highlights: [{ r: r, c: c, color: HL.target }].concat(others.map(function (p) { return { r: p[0], c: p[1], color: HL.related }; })),
+          eliminations: [], placements: [{ r: r, c: c, value: n }],
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function findNakedPair(board, cands) {
+  var units = getUnits();
+  for (var u = 0; u < units.length; u++) {
+    var unit = units[u];
+    var empties = unit.cells.filter(function (p) { return cands[p[0]][p[1]].length === 2; });
+    for (var i = 0; i < empties.length; i++)
+      for (var j = i + 1; j < empties.length; j++) {
+        var r1 = empties[i][0], c1 = empties[i][1], r2 = empties[j][0], c2 = empties[j][1];
+        var a = cands[r1][c1], b = cands[r2][c2];
+        if (a[0] === b[0] && a[1] === b[1]) {
+          var elims = [];
+          for (var k = 0; k < unit.cells.length; k++) {
+            var rr = unit.cells[k][0], cc = unit.cells[k][1];
+            if ((rr === r1 && cc === c1) || (rr === r2 && cc === c2)) continue;
+            var rem = cands[rr][cc].filter(function (v) { return a.indexOf(v) >= 0; });
+            if (rem.length > 0) elims.push({ r: rr, c: cc, values: rem, color: HL.eliminate });
+          }
+          if (elims.length > 0) return {
+            type: "Naked Pair", difficulty: "Intermediate",
+            explanation: "R" + (r1 + 1) + "C" + (c1 + 1) + " and R" + (r2 + 1) + "C" + (c2 + 1) + " in " + unit.name + " both have {" + a.join(",") + "}. Eliminate from other cells.",
+            highlights: [{ r: r1, c: c1, color: HL.trigger }, { r: r2, c: c2, color: HL.trigger }],
+            eliminations: elims, placements: [],
+          };
+        }
+      }
+  }
+  return null;
+}
+
+function findNakedTriple(board, cands) {
+  var units = getUnits();
+  for (var u = 0; u < units.length; u++) {
+    var unit = units[u];
+    var empties = unit.cells.filter(function (p) { var l = cands[p[0]][p[1]].length; return l >= 2 && l <= 3; });
+    if (empties.length < 3) continue;
+    for (var i = 0; i < empties.length; i++)
+      for (var j = i + 1; j < empties.length; j++)
+        for (var k = j + 1; k < empties.length; k++) {
+          var trio = [empties[i], empties[j], empties[k]];
+          var unionObj = {};
+          trio.forEach(function (p) { cands[p[0]][p[1]].forEach(function (v) { unionObj[v] = true; }); });
+          var unionArr = Object.keys(unionObj).map(Number).sort(function (a, b) { return a - b; });
+          if (unionArr.length === 3) {
+            var elims = [];
+            for (var m = 0; m < unit.cells.length; m++) {
+              var rr = unit.cells[m][0], cc = unit.cells[m][1];
+              if (trio.some(function (p) { return p[0] === rr && p[1] === cc; })) continue;
+              var rem = cands[rr][cc].filter(function (v) { return unionObj[v]; });
+              if (rem.length > 0) elims.push({ r: rr, c: cc, values: rem, color: HL.eliminate });
+            }
+            if (elims.length > 0) return {
+              type: "Naked Triple", difficulty: "Intermediate",
+              explanation: trio.map(function (p) { return "R" + (p[0] + 1) + "C" + (p[1] + 1); }).join(", ") + " in " + unit.name + " share {" + unionArr.join(",") + "}. Eliminate from other cells.",
+              highlights: trio.map(function (p) { return { r: p[0], c: p[1], color: HL.trigger }; }),
+              eliminations: elims, placements: [],
+            };
+          }
+        }
+  }
+  return null;
+}
+
+function findHiddenPair(board, cands) {
+  var units = getUnits();
+  for (var u = 0; u < units.length; u++) {
+    var unit = units[u];
+    for (var n1 = 1; n1 <= 9; n1++) {
+      var pos1 = unit.cells.filter(function (p) { return cands[p[0]][p[1]].indexOf(n1) >= 0; });
+      if (pos1.length !== 2) continue;
+      for (var n2 = n1 + 1; n2 <= 9; n2++) {
+        var pos2 = unit.cells.filter(function (p) { return cands[p[0]][p[1]].indexOf(n2) >= 0; });
+        if (pos2.length !== 2) continue;
+        if (pos1[0][0] === pos2[0][0] && pos1[0][1] === pos2[0][1] && pos1[1][0] === pos2[1][0] && pos1[1][1] === pos2[1][1]) {
+          var r1 = pos1[0][0], c1 = pos1[0][1], r2 = pos1[1][0], c2 = pos1[1][1];
+          var elims = [];
+          [[r1, c1], [r2, c2]].forEach(function (p) {
+            var rem = cands[p[0]][p[1]].filter(function (v) { return v !== n1 && v !== n2; });
+            if (rem.length > 0) elims.push({ r: p[0], c: p[1], values: rem, color: HL.eliminate });
+          });
+          if (elims.length > 0) return {
+            type: "Hidden Pair", difficulty: "Intermediate",
+            explanation: "In " + unit.name + ", digits " + n1 + " and " + n2 + " only fit in R" + (r1 + 1) + "C" + (c1 + 1) + " and R" + (r2 + 1) + "C" + (c2 + 1) + ". Other candidates can be removed.",
+            highlights: [{ r: r1, c: c1, color: HL.trigger }, { r: r2, c: c2, color: HL.trigger }],
+            eliminations: elims, placements: [],
+          };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function findPointingPair(board, cands) {
+  for (var b = 0; b < 9; b++) {
+    var cells = boxCells(b);
+    for (var n = 1; n <= 9; n++) {
+      var pos = cells.filter(function (p) { return cands[p[0]][p[1]].indexOf(n) >= 0; });
+      if (pos.length < 2 || pos.length > 3) continue;
+      var rowSet = {}, colSet = {};
+      pos.forEach(function (p) { rowSet[p[0]] = true; colSet[p[1]] = true; });
+      var rows = Object.keys(rowSet).map(Number), cols = Object.keys(colSet).map(Number);
+      if (rows.length === 1) {
+        var row = rows[0], elims = [];
+        for (var c = 0; c < 9; c++) {
+          if (boxOf(row, c) === b) continue;
+          if (cands[row][c].indexOf(n) >= 0) elims.push({ r: row, c: c, values: [n], color: HL.eliminate });
+        }
+        if (elims.length > 0) return {
+          type: "Pointing Pair", difficulty: "Intermediate",
+          explanation: "In box " + (b + 1) + ", digit " + n + " is confined to row " + (row + 1) + ". Eliminate from row " + (row + 1) + " outside this box.",
+          highlights: pos.map(function (p) { return { r: p[0], c: p[1], color: HL.trigger }; }),
+          eliminations: elims, placements: [],
+        };
+      }
+      if (cols.length === 1) {
+        var col = cols[0], elims2 = [];
+        for (var r = 0; r < 9; r++) {
+          if (boxOf(r, col) === b) continue;
+          if (cands[r][col].indexOf(n) >= 0) elims2.push({ r: r, c: col, values: [n], color: HL.eliminate });
+        }
+        if (elims2.length > 0) return {
+          type: "Pointing Pair", difficulty: "Intermediate",
+          explanation: "In box " + (b + 1) + ", digit " + n + " is confined to column " + (col + 1) + ". Eliminate from column " + (col + 1) + " outside this box.",
+          highlights: pos.map(function (p) { return { r: p[0], c: p[1], color: HL.trigger }; }),
+          eliminations: elims2, placements: [],
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function findBoxLineReduction(board, cands) {
+  for (var row = 0; row < 9; row++) {
+    for (var n = 1; n <= 9; n++) {
+      var pos = [];
+      for (var c = 0; c < 9; c++) if (cands[row][c].indexOf(n) >= 0) pos.push([row, c]);
+      if (pos.length < 2 || pos.length > 3) continue;
+      var boxSet = {};
+      pos.forEach(function (p) { boxSet[boxOf(p[0], p[1])] = true; });
+      var boxes = Object.keys(boxSet).map(Number);
+      if (boxes.length === 1) {
+        var b = boxes[0], elims = [];
+        boxCells(b).forEach(function (p) {
+          if (p[0] === row) return;
+          if (cands[p[0]][p[1]].indexOf(n) >= 0) elims.push({ r: p[0], c: p[1], values: [n], color: HL.eliminate });
+        });
+        if (elims.length > 0) return {
+          type: "Box/Line Reduction", difficulty: "Intermediate",
+          explanation: "In row " + (row + 1) + ", digit " + n + " is confined to box " + (b + 1) + ". Eliminate from other cells in box " + (b + 1) + ".",
+          highlights: pos.map(function (p) { return { r: p[0], c: p[1], color: HL.trigger }; }),
+          eliminations: elims, placements: [],
+        };
+      }
+    }
+  }
+  for (var col = 0; col < 9; col++) {
+    for (var n2 = 1; n2 <= 9; n2++) {
+      var pos2 = [];
+      for (var r = 0; r < 9; r++) if (cands[r][col].indexOf(n2) >= 0) pos2.push([r, col]);
+      if (pos2.length < 2 || pos2.length > 3) continue;
+      var boxSet2 = {};
+      pos2.forEach(function (p) { boxSet2[boxOf(p[0], p[1])] = true; });
+      var boxes2 = Object.keys(boxSet2).map(Number);
+      if (boxes2.length === 1) {
+        var b2 = boxes2[0], elims2 = [];
+        boxCells(b2).forEach(function (p) {
+          if (p[1] === col) return;
+          if (cands[p[0]][p[1]].indexOf(n2) >= 0) elims2.push({ r: p[0], c: p[1], values: [n2], color: HL.eliminate });
+        });
+        if (elims2.length > 0) return {
+          type: "Box/Line Reduction", difficulty: "Intermediate",
+          explanation: "In column " + (col + 1) + ", digit " + n2 + " is confined to box " + (b2 + 1) + ". Eliminate from other cells in box " + (b2 + 1) + ".",
+          highlights: pos2.map(function (p) { return { r: p[0], c: p[1], color: HL.trigger }; }),
+          eliminations: elims2, placements: [],
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function findXWing(board, cands) {
+  for (var n = 1; n <= 9; n++) {
+    var rowPos = [];
+    for (var r = 0; r < 9; r++) {
+      var cols = [];
+      for (var c = 0; c < 9; c++) if (cands[r][c].indexOf(n) >= 0) cols.push(c);
+      if (cols.length === 2) rowPos.push({ row: r, cols: cols });
+    }
+    for (var i = 0; i < rowPos.length; i++)
+      for (var j = i + 1; j < rowPos.length; j++) {
+        var a = rowPos[i], b = rowPos[j];
+        if (a.cols[0] === b.cols[0] && a.cols[1] === b.cols[1]) {
+          var elims = [];
+          for (var rr = 0; rr < 9; rr++) {
+            if (rr === a.row || rr === b.row) continue;
+            a.cols.forEach(function (cc) { if (cands[rr][cc].indexOf(n) >= 0) elims.push({ r: rr, c: cc, values: [n], color: HL.eliminate }); });
+          }
+          if (elims.length > 0) return {
+            type: "X-Wing", difficulty: "Advanced",
+            explanation: "Digit " + n + " in rows " + (a.row + 1) + " and " + (b.row + 1) + " is confined to columns " + (a.cols[0] + 1) + " and " + (a.cols[1] + 1) + ". Eliminate from these columns in other rows.",
+            highlights: [{ r: a.row, c: a.cols[0], color: HL.trigger }, { r: a.row, c: a.cols[1], color: HL.trigger }, { r: b.row, c: b.cols[0], color: HL.trigger }, { r: b.row, c: b.cols[1], color: HL.trigger }],
+            eliminations: elims, placements: [],
+          };
+        }
+      }
+    var colPos = [];
+    for (var c2 = 0; c2 < 9; c2++) {
+      var rows = [];
+      for (var r2 = 0; r2 < 9; r2++) if (cands[r2][c2].indexOf(n) >= 0) rows.push(r2);
+      if (rows.length === 2) colPos.push({ col: c2, rows: rows });
+    }
+    for (var i2 = 0; i2 < colPos.length; i2++)
+      for (var j2 = i2 + 1; j2 < colPos.length; j2++) {
+        var a2 = colPos[i2], b2 = colPos[j2];
+        if (a2.rows[0] === b2.rows[0] && a2.rows[1] === b2.rows[1]) {
+          var elims2 = [];
+          for (var cc2 = 0; cc2 < 9; cc2++) {
+            if (cc2 === a2.col || cc2 === b2.col) continue;
+            a2.rows.forEach(function (rr) { if (cands[rr][cc2].indexOf(n) >= 0) elims2.push({ r: rr, c: cc2, values: [n], color: HL.eliminate }); });
+          }
+          if (elims2.length > 0) return {
+            type: "X-Wing", difficulty: "Advanced",
+            explanation: "Digit " + n + " in columns " + (a2.col + 1) + " and " + (b2.col + 1) + " is confined to rows " + (a2.rows[0] + 1) + " and " + (a2.rows[1] + 1) + ". Eliminate from these rows in other columns.",
+            highlights: [{ r: a2.rows[0], c: a2.col, color: HL.trigger }, { r: a2.rows[1], c: a2.col, color: HL.trigger }, { r: b2.rows[0], c: b2.col, color: HL.trigger }, { r: b2.rows[1], c: b2.col, color: HL.trigger }],
+            eliminations: elims2, placements: [],
+          };
+        }
+      }
+  }
+  return null;
+}
+
+function findSwordfish(board, cands) {
+  for (var n = 1; n <= 9; n++) {
+    var rowData = [];
+    for (var r = 0; r < 9; r++) {
+      var cols = [];
+      for (var c = 0; c < 9; c++) if (cands[r][c].indexOf(n) >= 0) cols.push(c);
+      if (cols.length >= 2 && cols.length <= 3) rowData.push({ row: r, cols: cols });
+    }
+    if (rowData.length >= 3) {
+      for (var i = 0; i < rowData.length; i++)
+        for (var j = i + 1; j < rowData.length; j++)
+          for (var k = j + 1; k < rowData.length; k++) {
+            var trio = [rowData[i], rowData[j], rowData[k]];
+            var colObj = {};
+            trio.forEach(function (t) { t.cols.forEach(function (c) { colObj[c] = true; }); });
+            var allCols = Object.keys(colObj).map(Number);
+            if (allCols.length === 3) {
+              var usedRows = {};
+              trio.forEach(function (t) { usedRows[t.row] = true; });
+              var elims = [];
+              for (var rr = 0; rr < 9; rr++) {
+                if (usedRows[rr]) continue;
+                allCols.forEach(function (cc) { if (cands[rr][cc].indexOf(n) >= 0) elims.push({ r: rr, c: cc, values: [n], color: HL.eliminate }); });
+              }
+              if (elims.length > 0) {
+                var hl = [];
+                trio.forEach(function (t) { t.cols.forEach(function (c) { hl.push({ r: t.row, c: c, color: HL.trigger }); }); });
+                return {
+                  type: "Swordfish", difficulty: "Advanced",
+                  explanation: "Digit " + n + " forms a Swordfish across rows " + trio.map(function (t) { return t.row + 1; }).join(",") + " and columns " + allCols.map(function (c) { return c + 1; }).join(",") + ".",
+                  highlights: hl, eliminations: elims, placements: [],
+                };
+              }
+            }
+          }
+    }
+  }
+  return null;
+}
+
+function findXYWing(board, cands) {
+  for (var r = 0; r < 9; r++)
+    for (var c = 0; c < 9; c++) {
+      if (cands[r][c].length !== 2) continue;
+      var x = cands[r][c][0], y = cands[r][c][1];
+      var peers = [], added = {};
+      var addPeer = function (rr, cc) {
+        var k = rr + "," + cc;
+        if (!added[k] && (rr !== r || cc !== c) && cands[rr][cc].length === 2) { peers.push([rr, cc]); added[k] = true; }
+      };
+      for (var i = 0; i < 9; i++) { addPeer(r, i); addPeer(i, c); }
+      var br = Math.floor(r / 3) * 3, bc = Math.floor(c / 3) * 3;
+      for (var rr = br; rr < br + 3; rr++) for (var cc = bc; cc < bc + 3; cc++) addPeer(rr, cc);
+
+      for (var pi = 0; pi < peers.length; pi++)
+        for (var pj = pi + 1; pj < peers.length; pj++) {
+          var r1 = peers[pi][0], c1 = peers[pi][1], r2 = peers[pj][0], c2 = peers[pj][1];
+          var ca = cands[r1][c1], cb = cands[r2][c2];
+          var pairs = [[x, y], [y, x]];
+          for (var pp = 0; pp < pairs.length; pp++) {
+            var a = pairs[pp][0], b2 = pairs[pp][1];
+            if (ca.indexOf(a) >= 0 && ca.indexOf(b2) < 0) {
+              var z = ca[0] === a ? ca[1] : ca[0];
+              if (cb.indexOf(b2) >= 0 && cb.indexOf(a) < 0 && (cb[0] === b2 ? cb[1] : cb[0]) === z) {
+                var elims = [];
+                for (var er = 0; er < 9; er++) for (var ec = 0; ec < 9; ec++) {
+                  if (cands[er][ec].indexOf(z) < 0) continue;
+                  if ((er === r1 && ec === c1) || (er === r2 && ec === c2) || (er === r && ec === c)) continue;
+                  var sees1 = er === r1 || ec === c1 || boxOf(er, ec) === boxOf(r1, c1);
+                  var sees2 = er === r2 || ec === c2 || boxOf(er, ec) === boxOf(r2, c2);
+                  if (sees1 && sees2) elims.push({ r: er, c: ec, values: [z], color: HL.eliminate });
+                }
+                if (elims.length > 0) return {
+                  type: "XY-Wing", difficulty: "Advanced",
+                  explanation: "R" + (r + 1) + "C" + (c + 1) + " (pivot {" + x + "," + y + "}) connects to wings R" + (r1 + 1) + "C" + (c1 + 1) + " and R" + (r2 + 1) + "C" + (c2 + 1) + ". Eliminate " + z + " from cells seeing both wings.",
+                  highlights: [{ r: r, c: c, color: HL.related }, { r: r1, c: c1, color: HL.trigger }, { r: r2, c: c2, color: HL.trigger }],
+                  eliminations: elims, placements: [],
+                };
+              }
+            }
+          }
+        }
+    }
+  return null;
+}
+
+function findUniqueRectangle(board, cands) {
+  for (var r1 = 0; r1 < 9; r1++) for (var r2 = r1 + 1; r2 < 9; r2++)
+    for (var c1 = 0; c1 < 9; c1++) for (var c2 = c1 + 1; c2 < 9; c2++) {
+      var corners = [[r1, c1], [r1, c2], [r2, c1], [r2, c2]];
+      if (corners.some(function (p) { return board[p[0]][p[1]] !== 0; })) continue;
+      var bxObj = {};
+      corners.forEach(function (p) { bxObj[boxOf(p[0], p[1])] = true; });
+      if (Object.keys(bxObj).length < 2) continue;
+      var bivalue = corners.filter(function (p) { return cands[p[0]][p[1]].length === 2; });
+      if (bivalue.length < 3) continue;
+      var bvKeys = bivalue.map(function (p) { return cands[p[0]][p[1]].join(","); });
+      var target = null;
+      for (var bi = 0; bi < bvKeys.length; bi++) {
+        var count = bvKeys.filter(function (k) { return k === bvKeys[bi]; }).length;
+        if (count >= 3) { target = bvKeys[bi]; break; }
+      }
+      if (!target) continue;
+      var pair = target.split(",").map(Number);
+      var three = bivalue.filter(function (p) { return cands[p[0]][p[1]].join(",") === target; });
+      if (three.length !== 3) continue;
+      var fourth = corners.find(function (p) { return !three.some(function (t) { return t[0] === p[0] && t[1] === p[1]; }); });
+      if (!fourth) continue;
+      var fr = fourth[0], fc = fourth[1];
+      if (cands[fr][fc].indexOf(pair[0]) < 0 || cands[fr][fc].indexOf(pair[1]) < 0) continue;
+      if (cands[fr][fc].length <= 2) continue;
+      return {
+        type: "Unique Rectangle", difficulty: "Advanced",
+        explanation: corners.map(function (p) { return "R" + (p[0] + 1) + "C" + (p[1] + 1); }).join(", ") + " form a Unique Rectangle with {" + pair.join(",") + "}. Eliminate {" + pair.join(",") + "} from R" + (fr + 1) + "C" + (fc + 1) + ".",
+        highlights: three.map(function (p) { return { r: p[0], c: p[1], color: HL.trigger }; }).concat([{ r: fr, c: fc, color: HL.related }]),
+        eliminations: [{ r: fr, c: fc, values: pair, color: HL.eliminate }], placements: [],
+      };
+    }
+  return null;
+}
+
+// 12. HIDDEN TRIPLE
+function findHiddenTriple(board, cands) {
+  var units = getUnits();
+  for (var u = 0; u < units.length; u++) {
+    var unit = units[u];
+    // For each combination of 3 digits
+    for (var n1 = 1; n1 <= 7; n1++)
+      for (var n2 = n1 + 1; n2 <= 8; n2++)
+        for (var n3 = n2 + 1; n3 <= 9; n3++) {
+          var pos1 = unit.cells.filter(function (p) { return cands[p[0]][p[1]].indexOf(n1) >= 0; });
+          var pos2 = unit.cells.filter(function (p) { return cands[p[0]][p[1]].indexOf(n2) >= 0; });
+          var pos3 = unit.cells.filter(function (p) { return cands[p[0]][p[1]].indexOf(n3) >= 0; });
+          if (pos1.length === 0 || pos2.length === 0 || pos3.length === 0) continue;
+          if (pos1.length > 3 || pos2.length > 3 || pos3.length > 3) continue;
+          // Union of all positions
+          var allPos = {};
+          pos1.concat(pos2).concat(pos3).forEach(function (p) { allPos[p[0] + "," + p[1]] = p; });
+          var unique = Object.values(allPos);
+          if (unique.length !== 3) continue;
+          // Check that these 3 digits are NOT all already the only candidates
+          var elims = [];
+          unique.forEach(function (p) {
+            var rem = cands[p[0]][p[1]].filter(function (v) { return v !== n1 && v !== n2 && v !== n3; });
+            if (rem.length > 0) elims.push({ r: p[0], c: p[1], values: rem, color: HL.eliminate });
+          });
+          if (elims.length > 0) return {
+            type: "Hidden Triple", difficulty: "Intermediate",
+            explanation: "In " + unit.name + ", digits " + n1 + ", " + n2 + ", " + n3 + " only appear in " + unique.map(function (p) { return "R" + (p[0] + 1) + "C" + (p[1] + 1); }).join(", ") + ". Other candidates can be removed from these cells.",
+            highlights: unique.map(function (p) { return { r: p[0], c: p[1], color: HL.trigger }; }),
+            eliminations: elims, placements: [],
+          };
+        }
+  }
+  return null;
+}
+
+// 13. HIDDEN QUAD
+function findHiddenQuad(board, cands) {
+  var units = getUnits();
+  for (var u = 0; u < units.length; u++) {
+    var unit = units[u];
+    for (var n1 = 1; n1 <= 6; n1++)
+      for (var n2 = n1 + 1; n2 <= 7; n2++)
+        for (var n3 = n2 + 1; n3 <= 8; n3++)
+          for (var n4 = n3 + 1; n4 <= 9; n4++) {
+            var digits = [n1, n2, n3, n4];
+            var allPos = {};
+            var valid = true;
+            digits.forEach(function (n) {
+              var pos = unit.cells.filter(function (p) { return cands[p[0]][p[1]].indexOf(n) >= 0; });
+              if (pos.length === 0 || pos.length > 4) valid = false;
+              pos.forEach(function (p) { allPos[p[0] + "," + p[1]] = p; });
+            });
+            if (!valid) continue;
+            var unique = Object.values(allPos);
+            if (unique.length !== 4) continue;
+            var elims = [];
+            unique.forEach(function (p) {
+              var rem = cands[p[0]][p[1]].filter(function (v) { return digits.indexOf(v) < 0; });
+              if (rem.length > 0) elims.push({ r: p[0], c: p[1], values: rem, color: HL.eliminate });
+            });
+            if (elims.length > 0) return {
+              type: "Hidden Quad", difficulty: "Advanced",
+              explanation: "In " + unit.name + ", digits " + digits.join(",") + " only appear in " + unique.map(function (p) { return "R" + (p[0] + 1) + "C" + (p[1] + 1); }).join(", ") + ". Other candidates can be removed.",
+              highlights: unique.map(function (p) { return { r: p[0], c: p[1], color: HL.trigger }; }),
+              eliminations: elims, placements: [],
+            };
+          }
+  }
+  return null;
+}
+
+// 14. NAKED QUAD
+function findNakedQuad(board, cands) {
+  var units = getUnits();
+  for (var u = 0; u < units.length; u++) {
+    var unit = units[u];
+    var empties = unit.cells.filter(function (p) { var l = cands[p[0]][p[1]].length; return l >= 2 && l <= 4; });
+    if (empties.length < 4) continue;
+    for (var i = 0; i < empties.length; i++)
+      for (var j = i + 1; j < empties.length; j++)
+        for (var k = j + 1; k < empties.length; k++)
+          for (var m = k + 1; m < empties.length; m++) {
+            var quad = [empties[i], empties[j], empties[k], empties[m]];
+            var unionObj = {};
+            quad.forEach(function (p) { cands[p[0]][p[1]].forEach(function (v) { unionObj[v] = true; }); });
+            var unionArr = Object.keys(unionObj).map(Number);
+            if (unionArr.length === 4) {
+              var elims = [];
+              for (var q = 0; q < unit.cells.length; q++) {
+                var rr = unit.cells[q][0], cc = unit.cells[q][1];
+                if (quad.some(function (p) { return p[0] === rr && p[1] === cc; })) continue;
+                var rem = cands[rr][cc].filter(function (v) { return unionObj[v]; });
+                if (rem.length > 0) elims.push({ r: rr, c: cc, values: rem, color: HL.eliminate });
+              }
+              if (elims.length > 0) return {
+                type: "Naked Quad", difficulty: "Advanced",
+                explanation: quad.map(function (p) { return "R" + (p[0] + 1) + "C" + (p[1] + 1); }).join(", ") + " in " + unit.name + " share only {" + unionArr.sort(function (a, b) { return a - b; }).join(",") + "}. Eliminate from other cells.",
+                highlights: quad.map(function (p) { return { r: p[0], c: p[1], color: HL.trigger }; }),
+                eliminations: elims, placements: [],
+              };
+            }
+          }
+  }
+  return null;
+}
+
+// 15. SKYSCRAPER
+function findSkyscraper(board, cands) {
+  for (var n = 1; n <= 9; n++) {
+    // Row-based: find rows with exactly 2 positions for digit n
+    var rowPairs = [];
+    for (var r = 0; r < 9; r++) {
+      var cols = [];
+      for (var c = 0; c < 9; c++) if (cands[r][c].indexOf(n) >= 0) cols.push(c);
+      if (cols.length === 2) rowPairs.push({ row: r, cols: cols });
+    }
+    // Try pairs of rows that share ONE column (the "base")
+    for (var i = 0; i < rowPairs.length; i++)
+      for (var j = i + 1; j < rowPairs.length; j++) {
+        var a = rowPairs[i], b = rowPairs[j];
+        // Check if they share exactly one column
+        var shared = [];
+        a.cols.forEach(function (c) { if (b.cols.indexOf(c) >= 0) shared.push(c); });
+        if (shared.length !== 1) continue;
+        var baseCol = shared[0];
+        var topCol = a.cols[0] === baseCol ? a.cols[1] : a.cols[0];
+        var botCol = b.cols[0] === baseCol ? b.cols[1] : b.cols[0];
+        // The two "top" cells (non-shared) can eliminate n from cells that see BOTH
+        var elims = [];
+        for (var er = 0; er < 9; er++) for (var ec = 0; ec < 9; ec++) {
+          if (cands[er][ec].indexOf(n) < 0) continue;
+          if (er === a.row && ec === topCol) continue;
+          if (er === b.row && ec === botCol) continue;
+          if (er === a.row && ec === baseCol) continue;
+          if (er === b.row && ec === baseCol) continue;
+          var seesTop = er === a.row || ec === topCol || boxOf(er, ec) === boxOf(a.row, topCol);
+          var seesBot = er === b.row || ec === botCol || boxOf(er, ec) === boxOf(b.row, botCol);
+          if (seesTop && seesBot) elims.push({ r: er, c: ec, values: [n], color: HL.eliminate });
+        }
+        if (elims.length > 0) return {
+          type: "Skyscraper", difficulty: "Advanced",
+          explanation: "Digit " + n + " forms a Skyscraper: rows " + (a.row + 1) + " and " + (b.row + 1) + " each have " + n + " in exactly 2 cells, sharing column " + (baseCol + 1) + " as a base. The tops at C" + (topCol + 1) + " and C" + (botCol + 1) + " eliminate " + n + " from cells seeing both.",
+          highlights: [
+            { r: a.row, c: baseCol, color: HL.related }, { r: b.row, c: baseCol, color: HL.related },
+            { r: a.row, c: topCol, color: HL.trigger }, { r: b.row, c: botCol, color: HL.trigger }
+          ],
+          eliminations: elims, placements: [],
+        };
+      }
+    // Column-based
+    var colPairs = [];
+    for (var c2 = 0; c2 < 9; c2++) {
+      var rows = [];
+      for (var r2 = 0; r2 < 9; r2++) if (cands[r2][c2].indexOf(n) >= 0) rows.push(r2);
+      if (rows.length === 2) colPairs.push({ col: c2, rows: rows });
+    }
+    for (var i2 = 0; i2 < colPairs.length; i2++)
+      for (var j2 = i2 + 1; j2 < colPairs.length; j2++) {
+        var a2 = colPairs[i2], b2 = colPairs[j2];
+        var shared2 = [];
+        a2.rows.forEach(function (r) { if (b2.rows.indexOf(r) >= 0) shared2.push(r); });
+        if (shared2.length !== 1) continue;
+        var baseRow = shared2[0];
+        var topRow = a2.rows[0] === baseRow ? a2.rows[1] : a2.rows[0];
+        var botRow = b2.rows[0] === baseRow ? b2.rows[1] : b2.rows[0];
+        var elims2 = [];
+        for (var er2 = 0; er2 < 9; er2++) for (var ec2 = 0; ec2 < 9; ec2++) {
+          if (cands[er2][ec2].indexOf(n) < 0) continue;
+          if (er2 === topRow && ec2 === a2.col) continue;
+          if (er2 === botRow && ec2 === b2.col) continue;
+          if (er2 === baseRow && ec2 === a2.col) continue;
+          if (er2 === baseRow && ec2 === b2.col) continue;
+          var seesT = ec2 === a2.col || er2 === topRow || boxOf(er2, ec2) === boxOf(topRow, a2.col);
+          var seesB = ec2 === b2.col || er2 === botRow || boxOf(er2, ec2) === boxOf(botRow, b2.col);
+          if (seesT && seesB) elims2.push({ r: er2, c: ec2, values: [n], color: HL.eliminate });
+        }
+        if (elims2.length > 0) return {
+          type: "Skyscraper", difficulty: "Advanced",
+          explanation: "Digit " + n + " forms a Skyscraper: columns " + (a2.col + 1) + " and " + (b2.col + 1) + " each have " + n + " in exactly 2 cells, sharing row " + (baseRow + 1) + " as a base. The tops eliminate " + n + " from cells seeing both.",
+          highlights: [
+            { r: baseRow, c: a2.col, color: HL.related }, { r: baseRow, c: b2.col, color: HL.related },
+            { r: topRow, c: a2.col, color: HL.trigger }, { r: botRow, c: b2.col, color: HL.trigger }
+          ],
+          eliminations: elims2, placements: [],
+        };
+      }
+  }
+  return null;
+}
+
+// 16. XYZ-WING
+function findXYZWing(board, cands) {
+  for (var r = 0; r < 9; r++)
+    for (var c = 0; c < 9; c++) {
+      if (cands[r][c].length !== 3) continue;
+      var pivotCands = cands[r][c]; // {X, Y, Z}
+      // Find two peers of pivot that are bivalue, each sharing 2 of 3 candidates
+      var peers = [];
+      var added = {};
+      var addPeer = function (rr, cc) {
+        var k = rr + "," + cc;
+        if (!added[k] && (rr !== r || cc !== c) && cands[rr][cc].length === 2) { peers.push([rr, cc]); added[k] = true; }
+      };
+      for (var i = 0; i < 9; i++) { addPeer(r, i); addPeer(i, c); }
+      var br = Math.floor(r / 3) * 3, bc = Math.floor(c / 3) * 3;
+      for (var rr = br; rr < br + 3; rr++) for (var cc = bc; cc < bc + 3; cc++) addPeer(rr, cc);
+
+      for (var pi = 0; pi < peers.length; pi++)
+        for (var pj = pi + 1; pj < peers.length; pj++) {
+          var r1 = peers[pi][0], c1 = peers[pi][1], r2 = peers[pj][0], c2 = peers[pj][1];
+          var ca = cands[r1][c1], cb = cands[r2][c2];
+          // Both wings must be subsets of pivot's candidates
+          if (!ca.every(function (v) { return pivotCands.indexOf(v) >= 0; })) continue;
+          if (!cb.every(function (v) { return pivotCands.indexOf(v) >= 0; })) continue;
+          // Wings must be different pairs
+          if (ca[0] === cb[0] && ca[1] === cb[1]) continue;
+          // Union of wings must equal pivot
+          var wingUnion = {};
+          ca.forEach(function (v) { wingUnion[v] = true; });
+          cb.forEach(function (v) { wingUnion[v] = true; });
+          if (Object.keys(wingUnion).length !== 3) continue;
+          // Find Z = the digit shared by both wings
+          var z = null;
+          for (var vi = 0; vi < ca.length; vi++) {
+            if (cb.indexOf(ca[vi]) >= 0) { z = ca[vi]; break; }
+          }
+          if (z === null || pivotCands.indexOf(z) < 0) continue;
+          // Eliminate Z from cells that see ALL THREE (pivot + both wings)
+          var elims = [];
+          for (var er = 0; er < 9; er++) for (var ec = 0; ec < 9; ec++) {
+            if (cands[er][ec].indexOf(z) < 0) continue;
+            if ((er === r && ec === c) || (er === r1 && ec === c1) || (er === r2 && ec === c2)) continue;
+            var seesPivot = er === r || ec === c || boxOf(er, ec) === boxOf(r, c);
+            var seesW1 = er === r1 || ec === c1 || boxOf(er, ec) === boxOf(r1, c1);
+            var seesW2 = er === r2 || ec === c2 || boxOf(er, ec) === boxOf(r2, c2);
+            if (seesPivot && seesW1 && seesW2) elims.push({ r: er, c: ec, values: [z], color: HL.eliminate });
+          }
+          if (elims.length > 0) return {
+            type: "XYZ-Wing", difficulty: "Advanced",
+            explanation: "R" + (r + 1) + "C" + (c + 1) + " (pivot {" + pivotCands.join(",") + "}) with wings R" + (r1 + 1) + "C" + (c1 + 1) + " {" + ca.join(",") + "} and R" + (r2 + 1) + "C" + (c2 + 1) + " {" + cb.join(",") + "}. Digit " + z + " must appear in one of these three cells, so eliminate " + z + " from cells seeing all three.",
+            highlights: [{ r: r, c: c, color: HL.related }, { r: r1, c: c1, color: HL.trigger }, { r: r2, c: c2, color: HL.trigger }],
+            eliminations: elims, placements: [],
+          };
+        }
+    }
+  return null;
+}
+
+// 17. SIMPLE COLORING
+function findSimpleColoring(board, cands) {
+  for (var n = 1; n <= 9; n++) {
+    // Build conjugate pair graph for digit n
+    // A conjugate pair exists when a digit has exactly 2 positions in a unit
+    var links = {}; // "r,c" -> ["r2,c2", ...]
+    var addLink = function (r1, c1, r2, c2) {
+      var k1 = r1 + "," + c1, k2 = r2 + "," + c2;
+      if (!links[k1]) links[k1] = [];
+      if (!links[k2]) links[k2] = [];
+      if (links[k1].indexOf(k2) < 0) links[k1].push(k2);
+      if (links[k2].indexOf(k1) < 0) links[k2].push(k1);
+    };
+    // Rows
+    for (var r = 0; r < 9; r++) {
+      var cols = [];
+      for (var c = 0; c < 9; c++) if (cands[r][c].indexOf(n) >= 0) cols.push(c);
+      if (cols.length === 2) addLink(r, cols[0], r, cols[1]);
+    }
+    // Columns
+    for (var c2 = 0; c2 < 9; c2++) {
+      var rows = [];
+      for (var r2 = 0; r2 < 9; r2++) if (cands[r2][c2].indexOf(n) >= 0) rows.push(r2);
+      if (rows.length === 2) addLink(rows[0], c2, rows[1], c2);
+    }
+    // Boxes
+    for (var b = 0; b < 9; b++) {
+      var cells = boxCells(b);
+      var pos = cells.filter(function (p) { return cands[p[0]][p[1]].indexOf(n) >= 0; });
+      if (pos.length === 2) addLink(pos[0][0], pos[0][1], pos[1][0], pos[1][1]);
+    }
+    // BFS to 2-color each connected component
+    var allNodes = Object.keys(links);
+    if (allNodes.length === 0) continue;
+    var visited = {};
+    for (var ni = 0; ni < allNodes.length; ni++) {
+      var startNode = allNodes[ni];
+      if (visited[startNode]) continue;
+      var colorA = [], colorB = [];
+      var queue = [{ node: startNode, col: 0 }];
+      visited[startNode] = true;
+      var validColoring = true;
+      while (queue.length > 0) {
+        var cur = queue.shift();
+        if (cur.col === 0) colorA.push(cur.node); else colorB.push(cur.node);
+        var neighbors = links[cur.node] || [];
+        for (var nn = 0; nn < neighbors.length; nn++) {
+          var nb = neighbors[nn];
+          if (!visited[nb]) {
+            visited[nb] = true;
+            queue.push({ node: nb, col: 1 - cur.col });
+          }
+        }
+      }
+      if (!validColoring || colorA.length + colorB.length < 4) continue;
+
+      // Rule 2 (Color Trap): If a cell sees cells of BOTH colors, n can be eliminated
+      var parseKey = function (k) { var p = k.split(","); return [parseInt(p[0]), parseInt(p[1])]; };
+      var colorACells = colorA.map(parseKey);
+      var colorBCells = colorB.map(parseKey);
+      var elims = [];
+      for (var er = 0; er < 9; er++) for (var ec = 0; ec < 9; ec++) {
+        if (cands[er][ec].indexOf(n) < 0) continue;
+        var key = er + "," + ec;
+        if (colorA.indexOf(key) >= 0 || colorB.indexOf(key) >= 0) continue;
+        var seesA = false, seesB = false;
+        for (var ai = 0; ai < colorACells.length && !seesA; ai++) {
+          var ac = colorACells[ai];
+          if (er === ac[0] || ec === ac[1] || boxOf(er, ec) === boxOf(ac[0], ac[1])) seesA = true;
+        }
+        for (var bi2 = 0; bi2 < colorBCells.length && !seesB; bi2++) {
+          var bc2 = colorBCells[bi2];
+          if (er === bc2[0] || ec === bc2[1] || boxOf(er, ec) === boxOf(bc2[0], bc2[1])) seesB = true;
+        }
+        if (seesA && seesB) elims.push({ r: er, c: ec, values: [n], color: HL.eliminate });
+      }
+      if (elims.length > 0) {
+        var hlA = colorACells.map(function (p) { return { r: p[0], c: p[1], color: "#6366f1" }; });
+        var hlB = colorBCells.map(function (p) { return { r: p[0], c: p[1], color: "#f59e0b" }; });
+        return {
+          type: "Simple Coloring", difficulty: "Advanced",
+          explanation: "Digit " + n + " has a chain of conjugate pairs. Cells are colored in two groups. Any cell that sees both colors cannot contain " + n + ".",
+          highlights: hlA.concat(hlB), eliminations: elims, placements: [],
+        };
+      }
+
+      // Rule 1 (Color Wrap): If two cells of the SAME color see each other, that color is false
+      var checkWrap = function (colorCells, otherCells) {
+        for (var i = 0; i < colorCells.length; i++)
+          for (var j = i + 1; j < colorCells.length; j++) {
+            var a = colorCells[i], b2 = colorCells[j];
+            if (a[0] === b2[0] || a[1] === b2[1] || boxOf(a[0], a[1]) === boxOf(b2[0], b2[1])) {
+              // This color is false - the other color is true (placements)
+              var placements = otherCells.map(function (p) { return { r: p[0], c: p[1], value: n }; });
+              var hlTrue = otherCells.map(function (p) { return { r: p[0], c: p[1], color: HL.target }; });
+              var hlFalse = colorCells.map(function (p) { return { r: p[0], c: p[1], color: HL.eliminate }; });
+              return {
+                type: "Simple Coloring", difficulty: "Advanced",
+                explanation: "Digit " + n + ": two cells of the same color see each other (R" + (a[0] + 1) + "C" + (a[1] + 1) + " and R" + (b2[0] + 1) + "C" + (b2[1] + 1) + "), so that color is false. The opposite color cells must contain " + n + ".",
+                highlights: hlTrue.concat(hlFalse),
+                eliminations: colorCells.map(function (p) { return { r: p[0], c: p[1], values: [n], color: HL.eliminate }; }),
+                placements: placements,
+              };
+            }
+          }
+        return null;
+      };
+      var wrap = checkWrap(colorACells, colorBCells) || checkWrap(colorBCells, colorACells);
+      if (wrap) return wrap;
+    }
+  }
+  return null;
+}
+
+function getHint(board) {
+  var cands = getAllCandidates(board);
+  return findNakedSingle(board, cands) || findHiddenSingle(board, cands)
+    || findNakedPair(board, cands) || findHiddenPair(board, cands)
+    || findPointingPair(board, cands) || findBoxLineReduction(board, cands)
+    || findNakedTriple(board, cands) || findHiddenTriple(board, cands)
+    || findNakedQuad(board, cands) || findHiddenQuad(board, cands)
+    || findXWing(board, cands) || findSkyscraper(board, cands)
+    || findXYWing(board, cands) || findXYZWing(board, cands)
+    || findSwordfish(board, cands) || findSimpleColoring(board, cands)
+    || findUniqueRectangle(board, cands) || null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TECHNIQUE ENCYCLOPEDIA
+// ═══════════════════════════════════════════════════════════════════════════════
+
+var TECHNIQUES = [
+  { name: "Naked Single", difficulty: "Beginner", desc: "A cell has only one possible candidate left after eliminating all digits in its row, column, and box.", howTo: "Scan for cells where 8 of 9 digits are already visible in the cell's row, column, or box." },
+  { name: "Hidden Single", difficulty: "Beginner", desc: "A digit can only go in one cell within a row, column, or box - even if that cell has other candidates.", howTo: "For each unit, check where each digit 1-9 can go. If only one cell works, the digit goes there." },
+  { name: "Naked Pair", difficulty: "Intermediate", desc: "Two cells in a unit share the exact same two candidates. Those digits can be eliminated from all other cells in the unit.", howTo: "Look for two cells in a row/col/box that both have exactly the same two candidates." },
+  { name: "Hidden Pair", difficulty: "Intermediate", desc: "Two digits in a unit appear as candidates in only the same two cells. Other candidates in those cells can be removed.", howTo: "Check if two digits are confined to the same two cells in a unit - even if those cells have extra candidates." },
+  { name: "Pointing Pair", difficulty: "Intermediate", desc: "A candidate within a box is confined to a single row or column. It can be eliminated from that line outside the box.", howTo: "In each box, check if a digit's candidates all fall in one row or column." },
+  { name: "Box/Line Reduction", difficulty: "Intermediate", desc: "A candidate in a row/column is confined to one box. Eliminate it from other cells in that box.", howTo: "In each row/column, check if a digit's candidates all fall within one box." },
+  { name: "Naked Triple", difficulty: "Intermediate", desc: "Three cells in a unit collectively contain only three candidates. Those digits can be eliminated from other cells.", howTo: "Find three cells whose combined candidate set has exactly three digits." },
+  { name: "Hidden Triple", difficulty: "Intermediate", desc: "Three digits in a unit appear as candidates in only the same three cells. Other candidates in those cells can be removed, leaving just the triple.", howTo: "Check if three digits are confined to exactly three cells in a unit. Even if those cells have extra candidates, the triple locks them." },
+  { name: "Naked Quad", difficulty: "Advanced", desc: "Four cells in a unit collectively contain only four candidates. Those digits can be eliminated from other cells in the unit.", howTo: "Find four cells whose combined candidate set has exactly four digits. Less common than triples but same logic." },
+  { name: "Hidden Quad", difficulty: "Advanced", desc: "Four digits in a unit appear as candidates in only the same four cells. Other candidates in those cells can be removed.", howTo: "Check if four digits are confined to exactly four cells. Rare but powerful when other techniques stall." },
+  { name: "X-Wing", difficulty: "Advanced", desc: "A digit appears in exactly two cells in each of two rows, aligned on the same two columns. Eliminate from those columns in other rows.", howTo: "Find two rows where a digit has exactly 2 positions that share the same two columns." },
+  { name: "Skyscraper", difficulty: "Advanced", desc: "Two conjugate pairs for a digit share one endpoint (the base). The other two endpoints (tops) eliminate the digit from cells seeing both tops.", howTo: "Find two rows (or columns) with exactly 2 positions for a digit that share one column (or row). The unshared ends form the 'skyscraper tops'." },
+  { name: "XY-Wing", difficulty: "Advanced", desc: "A bivalue pivot {X,Y} connects to wings {X,Z} and {Y,Z}. One wing must hold Z, so eliminate Z from cells seeing both wings.", howTo: "Find a bivalue pivot connected to two bivalue wings sharing a third digit." },
+  { name: "XYZ-Wing", difficulty: "Advanced", desc: "A pivot with 3 candidates {X,Y,Z} connects to wings {X,Z} and {Y,Z}. Z must appear in one of the three cells, so eliminate Z from cells seeing all three.", howTo: "Find a 3-candidate pivot whose two bivalue wings cover all three digits, sharing Z. Eliminations are more restricted than XY-Wing since cells must see all three." },
+  { name: "Swordfish", difficulty: "Advanced", desc: "Like X-Wing but with 3 rows/columns. A digit's positions in 3 rows are confined to the same 3 columns.", howTo: "Find three rows where a digit appears in 2-3 cells, all within just 3 columns." },
+  { name: "Simple Coloring", difficulty: "Advanced", desc: "Build chains of conjugate pairs for a single digit and assign two colors. If two same-colored cells see each other (wrap), that color is false. If a cell sees both colors (trap), it can't hold the digit.", howTo: "For one digit, find all conjugate pairs and chain them. Color alternating cells. Look for contradictions (same color sees itself) or traps (uncolored cell sees both colors)." },
+  { name: "Unique Rectangle", difficulty: "Advanced", desc: "Four cells forming a rectangle with the same bivalue pair across two boxes would create two solutions. Break the deadly pattern.", howTo: "Find four cells spanning 2 boxes where three are bivalue with the same pair." },
+];
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PRACTICE ZONE - POSITION GENERATOR
+// ═══════════════════════════════════════════════════════════════════════════════
+
+var PRACTICE_TECHNIQUES = [
+  { name: "Naked Pair", removal: 38, finder: "findNakedPair" },
+  { name: "Hidden Pair", removal: 38, finder: "findHiddenPair" },
+  { name: "Pointing Pair", removal: 40, finder: "findPointingPair" },
+  { name: "Box/Line Reduction", removal: 42, finder: "findBoxLineReduction" },
+  { name: "Naked Triple", removal: 40, finder: "findNakedTriple" },
+  { name: "Hidden Triple", removal: 42, finder: "findHiddenTriple" },
+  { name: "X-Wing", removal: 50, finder: "findXWing" },
+  { name: "Skyscraper", removal: 50, finder: "findSkyscraper" },
+  { name: "XY-Wing", removal: 48, finder: "findXYWing" },
+  { name: "XYZ-Wing", removal: 48, finder: "findXYZWing" },
+  { name: "Swordfish", removal: 52, finder: "findSwordfish" },
+  { name: "Simple Coloring", removal: 52, finder: "findSimpleColoring" },
+  { name: "Unique Rectangle", removal: 48, finder: "findUniqueRectangle" },
+  { name: "Naked Quad", removal: 44, finder: "findNakedQuad" },
+  { name: "Hidden Quad", removal: 46, finder: "findHiddenQuad" },
+];
+
+var FINDERS = {
+  findNakedPair: findNakedPair,
+  findHiddenPair: findHiddenPair,
+  findPointingPair: findPointingPair,
+  findBoxLineReduction: findBoxLineReduction,
+  findNakedTriple: findNakedTriple,
+  findHiddenTriple: findHiddenTriple,
+  findXWing: findXWing,
+  findSkyscraper: findSkyscraper,
+  findXYWing: findXYWing,
+  findXYZWing: findXYZWing,
+  findSwordfish: findSwordfish,
+  findSimpleColoring: findSimpleColoring,
+  findUniqueRectangle: findUniqueRectangle,
+  findNakedQuad: findNakedQuad,
+  findHiddenQuad: findHiddenQuad,
+};
+
+function generatePracticeBoard(techniqueName) {
+  var tech = PRACTICE_TECHNIQUES.find(function (t) { return t.name === techniqueName; });
+  if (!tech) return null;
+  var finder = FINDERS[tech.finder];
+  if (!finder) return null;
+  var removal = tech.removal;
+  for (var attempt = 0; attempt < 80; attempt++) {
+    var solution = generateFullBoard();
+    var board = solution.map(function (r) { return r.slice(); });
+    var positions = shuffleArray(Array.from({ length: 81 }, function (_, i) { return [Math.floor(i / 9), i % 9]; }));
+    // Vary removal count slightly for variety
+    var actualRemoval = removal + Math.floor(Math.random() * 5) - 2;
+    var removed = 0;
+    for (var i = 0; i < positions.length && removed < actualRemoval; i++) {
+      board[positions[i][0]][positions[i][1]] = 0;
+      removed++;
+    }
+    var cands = getAllCandidates(board);
+    var result = finder(board, cands);
+    if (result !== null) {
+      return { board: board, solution: solution, hint: result };
+    }
+  }
+  // Fallback: just return a medium puzzle
+  var fb = generatePuzzle("hard");
+  var cands2 = getAllCandidates(fb.puzzle);
+  var fbResult = finder(fb.puzzle, cands2);
+  return { board: fb.puzzle, solution: fb.solution, hint: fbResult };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COLORS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+var CL = {
+  bg: "#0f172a", surface: "#1e293b", surfaceLight: "#334155",
+  border: "#475569", borderThick: "#94a3b8",
+  text: "#f1f5f9", textDim: "#94a3b8", textMuted: "#64748b",
+  primary: "#6366f1", primaryLight: "#818cf8", primaryDim: "rgba(99,102,241,0.15)",
+  success: "#22c55e", successDim: "rgba(34,197,94,0.15)",
+  error: "#ef4444", errorDim: "rgba(239,68,68,0.12)",
+  warning: "#f59e0b", warningDim: "rgba(245,158,11,0.15)",
+  hint: "#a78bfa", hintDim: "rgba(167,139,250,0.18)",
+  pencil: "#7dd3fc", given: "#e2e8f0",
+  selected: "rgba(99,102,241,0.25)", sameNum: "rgba(99,102,241,0.12)", related: "rgba(99,102,241,0.06)",
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function SudokuTrainer() {
+  var initData = useMemo(function () { return generatePuzzle("medium"); }, []);
+  var _difficulty = useState("medium");
+  var difficulty = _difficulty[0], setDifficulty = _difficulty[1];
+  var _puzzle = useState(function () { return initData.puzzle.map(function (r) { return r.slice(); }); });
+  var puzzle = _puzzle[0], setPuzzle = _puzzle[1];
+  var _solution = useState(function () { return initData.solution; });
+  var solution = _solution[0], setSolution = _solution[1];
+  var _board = useState(function () { return initData.puzzle.map(function (r) { return r.slice(); }); });
+  var board = _board[0], setBoard = _board[1];
+  var _marks = useState(emptyMarks);
+  var marks = _marks[0], setMarks = _marks[1];
+  var _selected = useState(null);
+  var selected = _selected[0], setSelected = _selected[1];
+  var _pencilMode = useState(false);
+  var pencilMode = _pencilMode[0], setPencilMode = _pencilMode[1];
+  var _errors = useState({});
+  var errors = _errors[0], setErrors = _errors[1];
+  var _hintsUsed = useState(0);
+  var hintsUsed = _hintsUsed[0], setHintsUsed = _hintsUsed[1];
+  var _currentHint = useState(null);
+  var currentHint = _currentHint[0], setCurrentHint = _currentHint[1];
+  var _showTech = useState(false);
+  var showTechniques = _showTech[0], setShowTechniques = _showTech[1];
+  var _timer = useState(0);
+  var timer = _timer[0], setTimer = _timer[1];
+  var _running = useState(true);
+  var running = _running[0], setRunning = _running[1];
+  var _completed = useState(false);
+  var completed = _completed[0], setCompleted = _completed[1];
+  var _history = useState([]);
+  var history = _history[0], setHistory = _history[1];
+  var _stats = useState({ easy: [], medium: [], hard: [], expert: [] });
+  var stats = _stats[0], setStats = _stats[1];
+  var _autoCheck = useState(false);
+  var autoCheck = _autoCheck[0], setAutoCheck = _autoCheck[1];
+  var _showCands = useState(false);
+  var showCandidates = _showCands[0], setShowCandidates = _showCands[1];
+  var _techLog = useState([]);
+  var techniqueLog = _techLog[0], setTechniqueLog = _techLog[1];
+  var timerRef = useRef(null);
+
+  // Practice Zone state
+  var _mode = useState("freeplay"); // "freeplay" or "practice"
+  var mode = _mode[0], setMode = _mode[1];
+  var _practiceTech = useState(null);
+  var practiceTech = _practiceTech[0], setPracticeTech = _practiceTech[1];
+  var _practiceHint = useState(null);
+  var practiceHint = _practiceHint[0], setPracticeHint = _practiceHint[1];
+  var _practicePhase = useState("select"); // "select", "challenge", "revealed", "solved"
+  var practicePhase = _practicePhase[0], setPracticePhase = _practicePhase[1];
+  var _practiceStreak = useState(0);
+  var practiceStreak = _practiceStreak[0], setPracticeStreak = _practiceStreak[1];
+  var _practiceMastery = useState({});
+  var practiceMastery = _practiceMastery[0], setPracticeMastery = _practiceMastery[1];
+  var _practiceTimer = useState(0);
+  var practiceTimer = _practiceTimer[0], setPracticeTimer = _practiceTimer[1];
+  var _practiceShowHint = useState(false);
+  var practiceShowHint = _practiceShowHint[0], setPracticeShowHint = _practiceShowHint[1];
+  var _generating = useState(false);
+  var generating = _generating[0], setGenerating = _generating[1];
+  var practiceTimerRef = useRef(null);
+
+  // Practice timer
+  useEffect(function () {
+    if (mode === "practice" && practicePhase === "challenge") {
+      practiceTimerRef.current = setInterval(function () { setPracticeTimer(function (t) { return t + 1; }); }, 1000);
+    }
+    return function () { clearInterval(practiceTimerRef.current); };
+  }, [mode, practicePhase]);
+
+  var startPractice = function (techName) {
+    setPracticeTech(techName);
+    setGenerating(true);
+    setPracticePhase("challenge");
+    setPracticeShowHint(false);
+    setPracticeTimer(0);
+    // Use setTimeout to let the UI update with "generating..." before heavy computation
+    setTimeout(function () {
+      var result = generatePracticeBoard(techName);
+      if (result && result.board) {
+        var b = result.board;
+        setPuzzle(b.map(function (r) { return r.slice(); }));
+        setSolution(result.solution);
+        setBoard(b.map(function (r) { return r.slice(); }));
+        setPracticeHint(result.hint);
+        // Auto-fill candidates for practice mode
+        var newMarks = emptyMarks();
+        for (var r = 0; r < 9; r++) for (var c = 0; c < 9; c++) {
+          if (b[r][c] !== 0) continue;
+          getCandidates(b, r, c).forEach(function (n) { newMarks[r][c][n] = true; });
+        }
+        setMarks(newMarks);
+      }
+      setSelected(null);
+      setErrors({});
+      setCurrentHint(null);
+      setHistory([]);
+      setCompleted(false);
+      setGenerating(false);
+    }, 50);
+  };
+
+  var revealPracticeAnswer = function () {
+    if (practiceHint) {
+      setCurrentHint(practiceHint);
+      setPracticePhase("revealed");
+      setPracticeShowHint(true);
+    }
+  };
+
+  var practiceApplyAndNext = function () {
+    // Apply the hint
+    if (practiceHint) {
+      var newBoard = board.map(function (r) { return r.slice(); });
+      var newMarksC = cloneMarks(marks);
+      if (practiceHint.placements && practiceHint.placements.length > 0) {
+        practiceHint.placements.forEach(function (p) {
+          newBoard[p.r][p.c] = p.value;
+          newMarksC[p.r][p.c] = {};
+          for (var i = 0; i < 9; i++) { delete newMarksC[p.r][i][p.value]; delete newMarksC[i][p.c][p.value]; }
+          var br = Math.floor(p.r / 3) * 3, bc = Math.floor(p.c / 3) * 3;
+          for (var rr = br; rr < br + 3; rr++) for (var cc = bc; cc < bc + 3; cc++) delete newMarksC[rr][cc][p.value];
+        });
+      }
+      if (practiceHint.eliminations && practiceHint.eliminations.length > 0) {
+        practiceHint.eliminations.forEach(function (e) { e.values.forEach(function (v) { delete newMarksC[e.r][e.c][v]; }); });
+      }
+      setBoard(newBoard);
+      setMarks(newMarksC);
+    }
+    // Update mastery
+    var wasRevealed = practiceShowHint;
+    setPracticeMastery(function (prev) {
+      var next = {};
+      for (var k in prev) next[k] = { attempts: prev[k].attempts, solved: prev[k].solved, revealed: prev[k].revealed, bestTime: prev[k].bestTime };
+      if (!next[practiceTech]) next[practiceTech] = { attempts: 0, solved: 0, revealed: 0, bestTime: 999 };
+      next[practiceTech].attempts++;
+      if (!wasRevealed) {
+        next[practiceTech].solved++;
+        if (practiceTimer < next[practiceTech].bestTime) next[practiceTech].bestTime = practiceTimer;
+        setPracticeStreak(function (s) { return s + 1; });
+      } else {
+        next[practiceTech].revealed++;
+        setPracticeStreak(0);
+      }
+      return next;
+    });
+    setCurrentHint(null);
+    // Generate next challenge
+    startPractice(practiceTech);
+  };
+
+  useEffect(function () {
+    if (running) timerRef.current = setInterval(function () { setTimer(function (t) { return t + 1; }); }, 1000);
+    return function () { clearInterval(timerRef.current); };
+  }, [running]);
+
+  var fmt = function (s) {
+    return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+  };
+
+  var startGame = function (diff) {
+    var d = diff || difficulty;
+    setDifficulty(d);
+    var data = generatePuzzle(d);
+    setPuzzle(data.puzzle.map(function (r) { return r.slice(); }));
+    setSolution(data.solution);
+    setBoard(data.puzzle.map(function (r) { return r.slice(); }));
+    setMarks(emptyMarks());
+    setSelected(null); setErrors({}); setHintsUsed(0); setCurrentHint(null);
+    setTimer(0); setRunning(true); setCompleted(false); setHistory([]);
+    setShowTechniques(false); setTechniqueLog([]);
+  };
+
+  // Check completion
+  useEffect(function () {
+    if (!board || !solution) return;
+    for (var r = 0; r < 9; r++) for (var c = 0; c < 9; c++) if (board[r][c] !== solution[r][c]) return;
+    setRunning(false); setCompleted(true);
+    setStats(function (prev) {
+      var next = {};
+      for (var k in prev) next[k] = prev[k].slice();
+      next[difficulty] = next[difficulty].concat([{ time: timer, hints: hintsUsed }]);
+      return next;
+    });
+  }, [board, solution, difficulty, timer, hintsUsed]);
+
+  var placeNumber = function (num) {
+    if (!selected || completed) return;
+    var r = selected[0], c = selected[1];
+    if (puzzle[r][c] !== 0) return;
+    if (pencilMode) {
+      setMarks(function (prev) { return toggleMark(prev, r, c, num); });
+    } else {
+      setHistory(function (prev) { return prev.concat([{ board: board.map(function (r) { return r.slice(); }), marks: cloneMarks(marks) }]); });
+      setBoard(function (prev) { var next = prev.map(function (r) { return r.slice(); }); next[r][c] = num; return next; });
+      setMarks(function (prev) {
+        var next = cloneMarks(prev);
+        next[r][c] = {};
+        for (var i = 0; i < 9; i++) { delete next[r][i][num]; delete next[i][c][num]; }
+        var br = Math.floor(r / 3) * 3, bc = Math.floor(c / 3) * 3;
+        for (var rr = br; rr < br + 3; rr++) for (var cc = bc; cc < bc + 3; cc++) delete next[rr][cc][num];
+        return next;
+      });
+      setCurrentHint(null);
+      if (autoCheck && solution && solution[r][c] !== num) {
+        setErrors(function (prev) { var next = {}; for (var k in prev) next[k] = true; next[r + "," + c] = true; return next; });
+      }
+    }
+  };
+
+  var eraseCell = function () {
+    if (!selected || completed) return;
+    var r = selected[0], c = selected[1];
+    if (puzzle[r][c] !== 0) return;
+    setHistory(function (prev) { return prev.concat([{ board: board.map(function (rr) { return rr.slice(); }), marks: cloneMarks(marks) }]); });
+    setBoard(function (prev) { var next = prev.map(function (rr) { return rr.slice(); }); next[r][c] = 0; return next; });
+    setMarks(function (prev) { return clearCell(prev, r, c); });
+    setErrors(function (prev) { var next = {}; for (var k in prev) { if (k !== r + "," + c) next[k] = true; } return next; });
+  };
+
+  var undo = function () {
+    if (!history.length) return;
+    var last = history[history.length - 1];
+    setBoard(last.board);
+    setMarks(last.marks);
+    setHistory(function (prev) { return prev.slice(0, -1); });
+  };
+
+  var requestHint = function () {
+    if (!board || completed) return;
+    var hint = getHint(board);
+    if (hint) {
+      setCurrentHint(hint);
+      setHintsUsed(function (h) { return h + 1; });
+      setTechniqueLog(function (prev) { return prev.concat([hint.type]); });
+      if (hint.placements && hint.placements.length > 0) setSelected([hint.placements[0].r, hint.placements[0].c]);
+      else if (hint.highlights && hint.highlights.length > 0) setSelected([hint.highlights[0].r, hint.highlights[0].c]);
+    } else {
+      setCurrentHint({ type: "No pattern found", difficulty: "", explanation: "No recognizable pattern found. Try pencil marks or more advanced techniques.", highlights: [], eliminations: [], placements: [] });
+    }
+  };
+
+  var applyHint = function () {
+    if (!currentHint) return;
+    setHistory(function (prev) { return prev.concat([{ board: board.map(function (r) { return r.slice(); }), marks: cloneMarks(marks) }]); });
+    if (currentHint.placements && currentHint.placements.length > 0) {
+      setBoard(function (prev) {
+        var next = prev.map(function (r) { return r.slice(); });
+        currentHint.placements.forEach(function (p) { next[p.r][p.c] = p.value; });
+        return next;
+      });
+      setMarks(function (prev) {
+        var next = cloneMarks(prev);
+        currentHint.placements.forEach(function (p) {
+          next[p.r][p.c] = {};
+          for (var i = 0; i < 9; i++) { delete next[p.r][i][p.value]; delete next[i][p.c][p.value]; }
+          var br = Math.floor(p.r / 3) * 3, bc = Math.floor(p.c / 3) * 3;
+          for (var rr = br; rr < br + 3; rr++) for (var cc = bc; cc < bc + 3; cc++) delete next[rr][cc][p.value];
+        });
+        return next;
+      });
+    }
+    if (currentHint.eliminations && currentHint.eliminations.length > 0) {
+      setMarks(function (prev) {
+        var next = cloneMarks(prev);
+        currentHint.eliminations.forEach(function (e) { e.values.forEach(function (v) { delete next[e.r][e.c][v]; }); });
+        return next;
+      });
+    }
+    setCurrentHint(null);
+  };
+
+  var fillAllCandidates = function () {
+    if (!board) return;
+    var newMarks = emptyMarks();
+    for (var r = 0; r < 9; r++) for (var c = 0; c < 9; c++) {
+      if (board[r][c] !== 0) continue;
+      getCandidates(board, r, c).forEach(function (n) { newMarks[r][c][n] = true; });
+    }
+    setMarks(newMarks);
+  };
+
+  useEffect(function () {
+    var handler = function (e) {
+      if (showTechniques) return;
+      var num = parseInt(e.key);
+      if (num >= 1 && num <= 9) { placeNumber(num); return; }
+      if (e.key === "Backspace" || e.key === "Delete") { eraseCell(); return; }
+      if (e.key === "p" || e.key === "P") { setPencilMode(function (p) { return !p; }); return; }
+      if ((e.key === "z" || e.key === "Z") && (e.ctrlKey || e.metaKey)) { undo(); return; }
+      if (e.key === "h" || e.key === "H") { requestHint(); return; }
+      if (selected) {
+        var r = selected[0], c = selected[1];
+        if (e.key === "ArrowUp" && r > 0) setSelected([r - 1, c]);
+        if (e.key === "ArrowDown" && r < 8) setSelected([r + 1, c]);
+        if (e.key === "ArrowLeft" && c > 0) setSelected([r, c - 1]);
+        if (e.key === "ArrowRight" && c < 8) setSelected([r, c + 1]);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return function () { window.removeEventListener("keydown", handler); };
+  });
+
+  // Build highlight map
+  var hlMap = useMemo(function () {
+    var map = {};
+    if (currentHint) {
+      (currentHint.highlights || []).forEach(function (h) { map[h.r + "," + h.c] = { type: "highlight", color: h.color }; });
+      (currentHint.eliminations || []).forEach(function (e) { map[e.r + "," + e.c] = { type: "elimination", color: e.color, values: e.values }; });
+    }
+    return map;
+  }, [currentHint]);
+
+  var selectedValue = selected ? board[selected[0]][selected[1]] : null;
+
+  var techCounts = useMemo(function () {
+    var counts = {};
+    techniqueLog.forEach(function (t) { counts[t] = (counts[t] || 0) + 1; });
+    return counts;
+  }, [techniqueLog]);
+
+  var errorCount = Object.keys(errors).length;
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Mastery level calculator
+  var getMasteryLevel = function (tech) {
+    var m = practiceMastery[tech];
+    if (!m || m.attempts === 0) return { level: "New", color: CL.textMuted, pct: 0 };
+    var ratio = m.solved / m.attempts;
+    if (m.solved >= 10 && ratio >= 0.9) return { level: "Master", color: "#a78bfa", pct: 100 };
+    if (m.solved >= 5 && ratio >= 0.7) return { level: "Proficient", color: CL.success, pct: 75 };
+    if (m.solved >= 2 && ratio >= 0.5) return { level: "Learning", color: CL.warning, pct: 50 };
+    return { level: "Novice", color: CL.error, pct: 25 };
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", background: CL.bg, color: CL.text, fontFamily: "'Inter',-apple-system,sans-serif", display: "flex", flexDirection: "column", alignItems: "center", padding: 16, boxSizing: "border-box" }}>
+      {/* Header */}
+      <div style={{ textAlign: "center", marginBottom: 10 }}>
+        <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: "-0.5px" }}>
+          <span style={{ color: CL.primaryLight }}>Sudoku</span> Trainer
+        </h1>
+        <p style={{ color: CL.textDim, fontSize: 13, margin: "4px 0 0" }}>17 technique detectors with Practice Zone</p>
+      </div>
+
+      {/* Mode Switcher */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 14, background: CL.surface, borderRadius: 10, padding: 3, border: "1px solid " + CL.border }}>
+        <button onClick={function () { setMode("freeplay"); setPracticePhase("select"); setCurrentHint(null); }} style={{
+          padding: "8px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, transition: "all 0.15s",
+          background: mode === "freeplay" ? CL.primary : "transparent", color: mode === "freeplay" ? "#fff" : CL.textDim,
+        }}>Free Play</button>
+        <button onClick={function () { setMode("practice"); setPracticePhase("select"); setCurrentHint(null); setRunning(false); }} style={{
+          padding: "8px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, transition: "all 0.15s",
+          background: mode === "practice" ? "#a78bfa" : "transparent", color: mode === "practice" ? "#fff" : CL.textDim,
+        }}>Practice Zone</button>
+      </div>
+
+      {/* FREE PLAY: Difficulty + timer */}
+      {mode === "freeplay" && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
+          {["easy", "medium", "hard", "expert"].map(function (d) {
+            return (
+              <button key={d} onClick={function () { startGame(d); }} style={{
+                padding: "6px 14px", borderRadius: 8, border: "1.5px solid " + (difficulty === d ? CL.primary : CL.border),
+                background: difficulty === d ? CL.primaryDim : "transparent", color: difficulty === d ? CL.primaryLight : CL.textDim,
+                cursor: "pointer", fontSize: 13, fontWeight: 600, textTransform: "capitalize", transition: "all 0.15s",
+              }}>{d}</button>
+            );
+          })}
+          <div style={{ marginLeft: 8, padding: "6px 14px", background: CL.surface, borderRadius: 8, fontVariantNumeric: "tabular-nums", fontSize: 15, fontWeight: 600, minWidth: 62, textAlign: "center" }}>{fmt(timer)}</div>
+        </div>
+      )}
+
+      {/* PRACTICE ZONE: Technique Selector */}
+      {mode === "practice" && practicePhase === "select" && (
+        <div style={{ maxWidth: 700, width: "100%", marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>Choose a Technique to Practice</div>
+              <div style={{ fontSize: 12, color: CL.textMuted }}>{"Streak: " + practiceStreak + " | Total solved: " + Object.values(practiceMastery).reduce(function (a, b) { return a + (b.solved || 0); }, 0)}</div>
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 8 }}>
+            {PRACTICE_TECHNIQUES.map(function (tech) {
+              var mastery = getMasteryLevel(tech.name);
+              var m = practiceMastery[tech.name];
+              var techInfo = TECHNIQUES.find(function (t) { return t.name === tech.name; });
+              var diff = techInfo ? techInfo.difficulty : "Advanced";
+              return (
+                <button key={tech.name} onClick={function () { startPractice(tech.name); }} style={{
+                  padding: 12, borderRadius: 10, border: "1.5px solid " + CL.border, background: CL.surface,
+                  cursor: "pointer", textAlign: "left", transition: "all 0.15s",
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: CL.text }}>{tech.name}</span>
+                    <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 8, fontWeight: 600,
+                      background: diff === "Beginner" ? CL.successDim : diff === "Intermediate" ? CL.warningDim : CL.errorDim,
+                      color: diff === "Beginner" ? CL.success : diff === "Intermediate" ? CL.warning : CL.error,
+                    }}>{diff}</span>
+                  </div>
+                  {/* Mastery bar */}
+                  <div style={{ height: 4, background: CL.surfaceLight, borderRadius: 2, marginBottom: 4 }}>
+                    <div style={{ height: "100%", width: mastery.pct + "%", background: mastery.color, borderRadius: 2, transition: "width 0.3s" }} />
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: CL.textMuted }}>
+                    <span style={{ color: mastery.color }}>{mastery.level}</span>
+                    <span>{m ? m.solved + "/" + m.attempts + " solved" : "Not tried"}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* PRACTICE ZONE: Challenge header */}
+      {mode === "practice" && practicePhase !== "select" && (
+        <div style={{ maxWidth: 700, width: "100%", marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <button onClick={function () { setPracticePhase("select"); setCurrentHint(null); }} style={{
+                padding: "6px 12px", borderRadius: 8, border: "1px solid " + CL.border, background: CL.surface,
+                color: CL.textDim, cursor: "pointer", fontSize: 12, fontWeight: 600,
+              }}>Back</button>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#a78bfa" }}>{"Practice: " + practiceTech}</div>
+                <div style={{ fontSize: 11, color: CL.textMuted }}>{"Find and apply the " + practiceTech + " pattern"}</div>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: CL.warning, fontVariantNumeric: "tabular-nums" }}>{fmt(practiceTimer)}</div>
+                <div style={{ fontSize: 9, color: CL.textMuted }}>Time</div>
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: CL.success }}>{practiceStreak}</div>
+                <div style={{ fontSize: 9, color: CL.textMuted }}>Streak</div>
+              </div>
+              {(function () {
+                var m = practiceMastery[practiceTech];
+                return (
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: CL.primaryLight }}>{m ? m.solved : 0}</div>
+                    <div style={{ fontSize: 9, color: CL.textMuted }}>Solved</div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+          {generating && (
+            <div style={{ textAlign: "center", padding: 20, color: "#a78bfa", fontSize: 14 }}>Generating puzzle with {practiceTech} pattern...</div>
+          )}
+          {!generating && practicePhase === "challenge" && !practiceShowHint && (
+            <div style={{ display: "flex", gap: 8, marginTop: 10, justifyContent: "center" }}>
+              <button onClick={revealPracticeAnswer} style={{
+                padding: "8px 16px", borderRadius: 8, border: "1.5px solid " + CL.border, background: CL.surface,
+                color: CL.textDim, cursor: "pointer", fontSize: 12, fontWeight: 600,
+              }}>I'm stuck - show me</button>
+              <button onClick={function () { startPractice(practiceTech); }} style={{
+                padding: "8px 16px", borderRadius: 8, border: "1.5px solid " + CL.border, background: CL.surface,
+                color: CL.textDim, cursor: "pointer", fontSize: 12, fontWeight: 600,
+              }}>Skip / New puzzle</button>
+            </div>
+          )}
+          {!generating && practiceShowHint && (
+            <div style={{ marginTop: 10, background: CL.hintDim, border: "1.5px solid " + CL.hint, borderRadius: 12, padding: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: CL.hint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>{"Answer: " + (practiceHint ? practiceHint.type : "")}</div>
+              <div style={{ fontSize: 13, color: CL.text, lineHeight: 1.5 }}>{practiceHint ? practiceHint.explanation : ""}</div>
+              <button onClick={practiceApplyAndNext} style={{
+                marginTop: 10, padding: "8px 16px", background: "#a78bfa", color: "#fff", border: "none", borderRadius: 8,
+                cursor: "pointer", fontSize: 12, fontWeight: 600,
+              }}>Apply and Next Challenge</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {completed && (
+        <div style={{ background: CL.successDim, border: "1.5px solid " + CL.success, borderRadius: 12, padding: "14px 24px", marginBottom: 12, textAlign: "center", maxWidth: 460 }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: CL.success }}>Puzzle Complete!</div>
+          <div style={{ color: CL.textDim, fontSize: 14, marginTop: 4 }}>{"Time: " + fmt(timer) + " \u2022 Hints: " + hintsUsed + " \u2022 " + difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}</div>
+          {techniqueLog.length > 0 && <div style={{ fontSize: 12, color: CL.textMuted, marginTop: 6 }}>{"Techniques: " + Array.from(new Set(techniqueLog)).join(", ")}</div>}
+          <button onClick={function () { startGame(difficulty); }} style={{ marginTop: 10, padding: "8px 20px", background: CL.success, color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 14 }}>New Game</button>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 20, flexWrap: "wrap", justifyContent: "center", alignItems: "flex-start", maxWidth: 880, width: "100%" }}>
+        <div>
+          {/* BOARD */}
+          <div style={{ display: "inline-grid", gridTemplateColumns: "repeat(9,1fr)", gap: 0, border: "2.5px solid " + CL.borderThick, borderRadius: 10, overflow: "hidden", background: CL.border }}>
+            {board.map(function (row, r) {
+              return row.map(function (val, c) {
+                var isGiven = puzzle[r][c] !== 0;
+                var isSelected = selected && selected[0] === r && selected[1] === c;
+                var isError = errors[r + "," + c];
+                var isSameNum = selectedValue && selectedValue !== 0 && val === selectedValue;
+                var isRelated = selected && (selected[0] === r || selected[1] === c || (Math.floor(selected[0] / 3) === Math.floor(r / 3) && Math.floor(selected[1] / 3) === Math.floor(c / 3)));
+                var hlInfo = hlMap[r + "," + c];
+                var bg = CL.surface;
+                if (hlInfo) bg = hlInfo.color + "22";
+                else if (isSelected) bg = CL.selected;
+                else if (isError) bg = CL.errorDim;
+                else if (isSameNum) bg = CL.sameNum;
+                else if (isRelated) bg = CL.related;
+                var cellMarks = getMarkList(marks, r, c);
+                var autoCands = showCandidates && val === 0 ? getCandidates(board, r, c) : [];
+                var elimValues = hlInfo && hlInfo.type === "elimination" ? hlInfo.values : [];
+                return (
+                  <div key={r + "-" + c} onClick={function () { setSelected([r, c]); }} style={{
+                    width: 46, height: 46, display: "flex", alignItems: "center", justifyContent: "center",
+                    background: bg, cursor: "pointer", position: "relative", transition: "background 0.1s", userSelect: "none",
+                    borderRight: c % 3 === 2 && c < 8 ? "2px solid " + CL.borderThick : "0.5px solid " + CL.border,
+                    borderBottom: r % 3 === 2 && r < 8 ? "2px solid " + CL.borderThick : "0.5px solid " + CL.border,
+                  }}>
+                    {hlInfo && <div style={{ position: "absolute", inset: 1, border: "2px solid " + hlInfo.color, borderRadius: 4, pointerEvents: "none", zIndex: 2 }} />}
+                    {val !== 0 ? (
+                      <span style={{ fontSize: 20, fontWeight: isGiven ? 700 : 500, color: isError ? CL.error : isGiven ? CL.given : CL.primaryLight, position: "relative", zIndex: 1 }}>{val}</span>
+                    ) : (cellMarks.length > 0 || autoCands.length > 0) ? (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gridTemplateRows: "repeat(3,1fr)", width: "100%", height: "100%", padding: 2, boxSizing: "border-box" }}>
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (n) {
+                          var hasM = cellMarks.indexOf(n) >= 0;
+                          var hasA = autoCands.indexOf(n) >= 0;
+                          var isElim = elimValues.indexOf(n) >= 0;
+                          var color = "transparent";
+                          if (isElim) color = CL.error;
+                          else if (hasM) color = CL.pencil;
+                          else if (hasA) color = CL.textMuted;
+                          return <span key={n} style={{ fontSize: 9, color: color, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1, fontWeight: isElim ? 800 : 400, textDecoration: isElim ? "line-through" : "none" }}>{n}</span>;
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              });
+            })}
+          </div>
+
+          {/* NUMBER PAD */}
+          <div style={{ display: "flex", gap: 4, marginTop: 12, justifyContent: "center" }}>
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (n) {
+              var count = 0;
+              board.forEach(function (row) { row.forEach(function (v) { if (v === n) count++; }); });
+              var done = count >= 9;
+              return (
+                <button key={n} onClick={function () { placeNumber(n); }} disabled={done} style={{
+                  width: 42, height: 48, borderRadius: 8, border: "1.5px solid " + (done ? CL.border : CL.primary),
+                  background: done ? CL.surface : CL.primaryDim, color: done ? CL.textMuted : CL.primaryLight,
+                  fontSize: 18, fontWeight: 700, cursor: done ? "default" : "pointer", opacity: done ? 0.4 : 1,
+                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1, transition: "all 0.15s",
+                }}>{n}<span style={{ fontSize: 9, fontWeight: 400, color: CL.textMuted }}>{9 - count}</span></button>
+              );
+            })}
+          </div>
+
+          {/* ACTIONS */}
+          <div style={{ display: "flex", gap: 6, marginTop: 10, justifyContent: "center", flexWrap: "wrap" }}>
+            <button onClick={function () { setPencilMode(function (p) { return !p; }); }} style={{ padding: "7px 12px", borderRadius: 8, border: "1.5px solid " + (pencilMode ? CL.primary : CL.border), background: pencilMode ? CL.primaryDim : CL.surface, color: pencilMode ? CL.primaryLight : CL.textDim, cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+              {"Pencil" + (pencilMode ? " ON" : "")} <span style={{ fontSize: 9, background: CL.surfaceLight, padding: "1px 4px", borderRadius: 3, color: CL.textMuted }}>P</span>
+            </button>
+            <button onClick={eraseCell} style={{ padding: "7px 12px", borderRadius: 8, border: "1.5px solid " + CL.border, background: CL.surface, color: CL.textDim, cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+              Erase <span style={{ fontSize: 9, background: CL.surfaceLight, padding: "1px 4px", borderRadius: 3, color: CL.textMuted }}>Del</span>
+            </button>
+            <button onClick={undo} style={{ padding: "7px 12px", borderRadius: 8, border: "1.5px solid " + CL.border, background: CL.surface, color: CL.textDim, cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+              Undo <span style={{ fontSize: 9, background: CL.surfaceLight, padding: "1px 4px", borderRadius: 3, color: CL.textMuted }}>Ctrl+Z</span>
+            </button>
+            <button onClick={requestHint} style={{ padding: "7px 12px", borderRadius: 8, border: "1.5px solid " + CL.border, background: CL.surface, color: CL.textDim, cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+              Hint <span style={{ fontSize: 9, background: CL.surfaceLight, padding: "1px 4px", borderRadius: 3, color: CL.textMuted }}>H</span>
+            </button>
+            <button onClick={fillAllCandidates} style={{ padding: "7px 12px", borderRadius: 8, border: "1.5px solid " + CL.border, background: CL.surface, color: CL.textDim, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+              Fill Candidates
+            </button>
+          </div>
+
+          <div style={{ display: "flex", gap: 16, marginTop: 10, justifyContent: "center", fontSize: 12 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, color: CL.textDim, cursor: "pointer" }}>
+              <input type="checkbox" checked={autoCheck} onChange={function () { setAutoCheck(function (a) { return !a; }); }} style={{ accentColor: CL.primary }} />Auto-check
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, color: CL.textDim, cursor: "pointer" }}>
+              <input type="checkbox" checked={showCandidates} onChange={function () { setShowCandidates(function (s) { return !s; }); }} style={{ accentColor: CL.primary }} />Show candidates
+            </label>
+          </div>
+        </div>
+
+        {/* RIGHT PANEL */}
+        <div style={{ width: 300, minWidth: 260 }}>
+          {currentHint && (
+            <div style={{ background: CL.hintDim, border: "1.5px solid " + CL.hint, borderRadius: 12, padding: 14, marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: CL.hint, textTransform: "uppercase", letterSpacing: 0.5 }}>{"Hint: " + currentHint.type}</span>
+                {currentHint.difficulty && (
+                  <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, fontWeight: 600,
+                    background: currentHint.difficulty === "Beginner" ? CL.successDim : currentHint.difficulty === "Intermediate" ? CL.warningDim : CL.errorDim,
+                    color: currentHint.difficulty === "Beginner" ? CL.success : currentHint.difficulty === "Intermediate" ? CL.warning : CL.error,
+                  }}>{currentHint.difficulty}</span>
+                )}
+              </div>
+              <div style={{ fontSize: 13, color: CL.text, lineHeight: 1.5 }}>{currentHint.explanation}</div>
+              {(currentHint.highlights.length > 0 || currentHint.eliminations.length > 0) && (
+                <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: 11, color: CL.textMuted, flexWrap: "wrap" }}>
+                  {currentHint.highlights.some(function (h) { return h.color === HL.trigger; }) && <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: HL.trigger + "44", border: "2px solid " + HL.trigger, verticalAlign: "middle", marginRight: 3 }} />Pattern</span>}
+                  {currentHint.highlights.some(function (h) { return h.color === HL.target; }) && <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: HL.target + "44", border: "2px solid " + HL.target, verticalAlign: "middle", marginRight: 3 }} />Place here</span>}
+                  {currentHint.highlights.some(function (h) { return h.color === HL.related; }) && <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: HL.related + "44", border: "2px solid " + HL.related, verticalAlign: "middle", marginRight: 3 }} />Related</span>}
+                  {currentHint.eliminations.length > 0 && <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: HL.eliminate + "44", border: "2px solid " + HL.eliminate, verticalAlign: "middle", marginRight: 3 }} />Eliminate</span>}
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+                {(currentHint.placements.length > 0 || currentHint.eliminations.length > 0) && (
+                  <button onClick={applyHint} style={{ padding: "6px 14px", background: CL.hint, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                    {currentHint.placements.length > 0 ? "Apply - Place " + currentHint.placements.map(function (p) { return p.value; }).join(",") : "Apply - Eliminate"}
+                  </button>
+                )}
+                <button onClick={function () { setCurrentHint(null); }} style={{ padding: "6px 14px", background: "transparent", color: CL.textMuted, border: "1px solid " + CL.border, borderRadius: 6, cursor: "pointer", fontSize: 12 }}>Dismiss</button>
+              </div>
+            </div>
+          )}
+
+          <div style={{ background: CL.surface, borderRadius: 12, padding: 14, marginBottom: 12, border: "1px solid " + CL.border }}>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Session Stats</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <div style={{ textAlign: "center" }}><div style={{ fontSize: 20, fontWeight: 700, color: CL.warning }}>{hintsUsed}</div><div style={{ fontSize: 11, color: CL.textMuted }}>Hints</div></div>
+              <div style={{ textAlign: "center" }}><div style={{ fontSize: 20, fontWeight: 700, color: CL.success }}>{board.flat().filter(function (v) { return v !== 0; }).length + "/81"}</div><div style={{ fontSize: 11, color: CL.textMuted }}>Filled</div></div>
+              <div style={{ textAlign: "center" }}><div style={{ fontSize: 20, fontWeight: 700, color: CL.error }}>{errorCount}</div><div style={{ fontSize: 11, color: CL.textMuted }}>Errors</div></div>
+              <div style={{ textAlign: "center" }}><div style={{ fontSize: 20, fontWeight: 700, color: CL.primaryLight }}>{Object.values(stats).flat().length}</div><div style={{ fontSize: 11, color: CL.textMuted }}>Games</div></div>
+            </div>
+            {Object.keys(techCounts).length > 0 && (
+              <div style={{ marginTop: 10, borderTop: "1px solid " + CL.border, paddingTop: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: CL.textDim, marginBottom: 4 }}>Techniques this game:</div>
+                {Object.keys(techCounts).map(function (name) {
+                  return <div key={name} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: CL.textMuted, padding: "2px 0" }}><span>{name}</span><span style={{ color: CL.primaryLight }}>{techCounts[name] + "x"}</span></div>;
+                })}
+              </div>
+            )}
+          </div>
+
+          <button onClick={function () { setShowTechniques(function (s) { return !s; }); }} style={{
+            width: "100%", padding: "10px 14px", borderRadius: 10, border: "1.5px solid " + CL.border,
+            background: CL.surface, color: CL.text, cursor: "pointer", fontSize: 13, fontWeight: 600,
+            textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12,
+          }}>
+            <span>{"Technique Encyclopedia (" + TECHNIQUES.length + ")"}</span>
+            <span style={{ fontSize: 18, lineHeight: 1 }}>{showTechniques ? "-" : "+"}</span>
+          </button>
+
+          {showTechniques && (
+            <div style={{ background: CL.surface, borderRadius: 12, padding: 14, border: "1px solid " + CL.border, maxHeight: 500, overflowY: "auto" }}>
+              {TECHNIQUES.map(function (t, i) {
+                return (
+                  <div key={t.name} style={{ marginBottom: i < TECHNIQUES.length - 1 ? 14 : 0, paddingBottom: i < TECHNIQUES.length - 1 ? 14 : 0, borderBottom: i < TECHNIQUES.length - 1 ? "1px solid " + CL.border : "none" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontWeight: 700, fontSize: 13 }}>{t.name}</span>
+                      <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, fontWeight: 600,
+                        background: t.difficulty === "Beginner" ? CL.successDim : t.difficulty === "Intermediate" ? CL.warningDim : CL.errorDim,
+                        color: t.difficulty === "Beginner" ? CL.success : t.difficulty === "Intermediate" ? CL.warning : CL.error,
+                      }}>{t.difficulty}</span>
+                    </div>
+                    <p style={{ fontSize: 12, color: CL.textDim, margin: "6px 0 4px", lineHeight: 1.5 }}>{t.desc}</p>
+                    <div style={{ fontSize: 11, color: CL.textMuted, background: CL.surfaceLight, padding: "6px 8px", borderRadius: 6, lineHeight: 1.4 }}>
+                      <strong style={{ color: CL.textDim }}>How to spot: </strong>{t.howTo}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {!showTechniques && (
+            <div style={{ background: CL.surface, borderRadius: 12, padding: 14, border: "1px solid " + CL.border }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: CL.textDim, marginBottom: 8 }}>Keyboard Shortcuts</div>
+              {[["1-9", "Place number"], ["Arrows", "Navigate"], ["P", "Pencil mode"], ["H", "Get hint"], ["Del", "Erase"], ["Ctrl+Z", "Undo"]].map(function (pair) {
+                return (
+                  <div key={pair[0]} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, padding: "3px 0", color: CL.textMuted }}>
+                    <span style={{ background: CL.surfaceLight, padding: "1px 6px", borderRadius: 4, fontFamily: "monospace", fontSize: 10, color: CL.textDim }}>{pair[0]}</span>
+                    <span>{pair[1]}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<SudokuTrainer />);
+</script>
+</body>
+</html>

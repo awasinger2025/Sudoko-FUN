@@ -1411,30 +1411,30 @@ function SudokuTrainer() {
       </div>
 
       {/* Mode Switcher */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 16, background: CL.surface, borderRadius: 12, padding: 4, border: "1px solid " + CL.border, boxShadow: "0 1px 2px rgba(24,24,27,0.03)" }}>
+      <div style={{ display: "flex", gap: 4, marginBottom: 20, background: CL.surface, borderRadius: 12, padding: 4, border: "1px solid " + CL.border, boxShadow: "0 1px 2px rgba(24,24,27,0.03)" }}>
         <button onClick={function () { setMode("freeplay"); setPracticePhase("select"); setCurrentHint(null); }} style={{
-          padding: "8px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, transition: "all 0.15s",
+          padding: "10px 24px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 14, fontWeight: 600, transition: "all 0.15s",
           background: mode === "freeplay" ? CL.primary : "transparent", color: mode === "freeplay" ? "#fff" : CL.textDim,
         }}>Free Play</button>
         <button onClick={function () { setMode("practice"); setPracticePhase("select"); setCurrentHint(null); setRunning(false); }} style={{
-          padding: "8px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, transition: "all 0.15s",
+          padding: "10px 24px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 14, fontWeight: 600, transition: "all 0.15s",
           background: mode === "practice" ? CL.hint : "transparent", color: mode === "practice" ? "#fff" : CL.textDim,
         }}>Practice Zone</button>
       </div>
 
       {/* FREE PLAY: Difficulty + timer */}
       {mode === "freeplay" && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
           {["easy", "medium", "hard", "expert"].map(function (d) {
             return (
               <button key={d} onClick={function () { startGame(d); }} style={{
-                padding: "6px 14px", borderRadius: 8, border: "1.5px solid " + (difficulty === d ? CL.primary : CL.border),
-                background: difficulty === d ? CL.primaryDim : "transparent", color: difficulty === d ? CL.primaryLight : CL.textDim,
-                cursor: "pointer", fontSize: 13, fontWeight: 600, textTransform: "capitalize", transition: "all 0.15s",
+                padding: "9px 18px", borderRadius: 10, border: "1.5px solid " + (difficulty === d ? CL.primary : CL.border),
+                background: difficulty === d ? CL.primaryDim : CL.surface, color: difficulty === d ? CL.primaryLight : CL.textDim,
+                cursor: "pointer", fontSize: 14, fontWeight: 600, textTransform: "capitalize", transition: "all 0.15s",
               }}>{d}</button>
             );
           })}
-          <div style={{ marginLeft: 8, padding: "6px 14px", background: CL.surface, borderRadius: 8, fontVariantNumeric: "tabular-nums", fontSize: 15, fontWeight: 600, minWidth: 62, textAlign: "center" }}>{fmt(timer)}</div>
+          <div style={{ marginLeft: 12, padding: "9px 18px", background: CL.surface, border: "1px solid " + CL.border, borderRadius: 10, fontVariantNumeric: "tabular-nums", fontSize: 18, fontWeight: 700, minWidth: 78, textAlign: "center", color: CL.text, letterSpacing: "-0.3px" }}>{fmt(timer)}</div>
         </div>
       )}
 
@@ -1551,7 +1551,7 @@ function SudokuTrainer() {
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 20, flexWrap: "wrap", justifyContent: "center", alignItems: "flex-start", maxWidth: 880, width: "100%" }}>
+      <div style={{ display: "flex", gap: 32, flexWrap: "wrap", justifyContent: "center", alignItems: "flex-start", maxWidth: 1020, width: "100%" }}>
         <div>
           {/* BOARD */}
           <div style={{ display: "inline-grid", gridTemplateColumns: "repeat(9,1fr)", gap: 0, border: "1.5px solid " + CL.borderThick, borderRadius: 14, overflow: "hidden", background: CL.border, boxShadow: "0 1px 2px rgba(24,24,27,0.04), 0 8px 24px -8px rgba(24,24,27,0.08)" }}>
@@ -1574,16 +1574,16 @@ function SudokuTrainer() {
                 var elimValues = hlInfo && hlInfo.type === "elimination" ? hlInfo.values : [];
                 return (
                   <div key={r + "-" + c} onClick={function () { setSelected([r, c]); }} style={{
-                    width: 46, height: 46, display: "flex", alignItems: "center", justifyContent: "center",
+                    width: 62, height: 62, display: "flex", alignItems: "center", justifyContent: "center",
                     background: bg, cursor: "pointer", position: "relative", transition: "background 0.1s", userSelect: "none",
                     borderRight: c % 3 === 2 && c < 8 ? "2px solid " + CL.borderThick : "0.5px solid " + CL.border,
                     borderBottom: r % 3 === 2 && r < 8 ? "2px solid " + CL.borderThick : "0.5px solid " + CL.border,
                   }}>
-                    {hlInfo && <div style={{ position: "absolute", inset: 1, border: "2px solid " + hlInfo.color, borderRadius: 4, pointerEvents: "none", zIndex: 2 }} />}
+                    {hlInfo && <div style={{ position: "absolute", inset: 2, border: "2px solid " + hlInfo.color, borderRadius: 5, pointerEvents: "none", zIndex: 2 }} />}
                     {val !== 0 ? (
-                      <span style={{ fontSize: 20, fontWeight: isGiven ? 700 : 500, color: isError ? CL.error : isGiven ? CL.given : CL.primaryLight, position: "relative", zIndex: 1 }}>{val}</span>
+                      <span style={{ fontSize: 30, fontWeight: isGiven ? 700 : 500, color: isError ? CL.error : isGiven ? CL.given : CL.primaryLight, position: "relative", zIndex: 1, letterSpacing: "-0.5px" }}>{val}</span>
                     ) : (cellMarks.length > 0 || autoCands.length > 0) ? (
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gridTemplateRows: "repeat(3,1fr)", width: "100%", height: "100%", padding: 2, boxSizing: "border-box" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gridTemplateRows: "repeat(3,1fr)", width: "100%", height: "100%", padding: 3, boxSizing: "border-box" }}>
                         {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (n) {
                           var hasM = cellMarks.indexOf(n) >= 0;
                           var hasA = autoCands.indexOf(n) >= 0;
@@ -1592,7 +1592,7 @@ function SudokuTrainer() {
                           if (isElim) color = CL.error;
                           else if (hasM) color = CL.pencil;
                           else if (hasA) color = CL.textMuted;
-                          return <span key={n} style={{ fontSize: 9, color: color, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1, fontWeight: isElim ? 800 : 400, textDecoration: isElim ? "line-through" : "none" }}>{n}</span>;
+                          return <span key={n} style={{ fontSize: 12, color: color, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1, fontWeight: isElim ? 800 : 500, textDecoration: isElim ? "line-through" : "none" }}>{n}</span>;
                         })}
                       </div>
                     ) : null}
@@ -1603,65 +1603,65 @@ function SudokuTrainer() {
           </div>
 
           {/* NUMBER PAD */}
-          <div style={{ display: "flex", gap: 4, marginTop: 12, justifyContent: "center" }}>
+          <div style={{ display: "flex", gap: 6, marginTop: 16, justifyContent: "center" }}>
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (n) {
               var count = 0;
               board.forEach(function (row) { row.forEach(function (v) { if (v === n) count++; }); });
               var done = count >= 9;
               return (
                 <button key={n} onClick={function () { placeNumber(n); }} disabled={done} style={{
-                  width: 42, height: 48, borderRadius: 8, border: "1.5px solid " + (done ? CL.border : CL.primary),
+                  width: 54, height: 64, borderRadius: 10, border: "1.5px solid " + (done ? CL.border : CL.primary),
                   background: done ? CL.surface : CL.primaryDim, color: done ? CL.textMuted : CL.primaryLight,
-                  fontSize: 18, fontWeight: 700, cursor: done ? "default" : "pointer", opacity: done ? 0.4 : 1,
-                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1, transition: "all 0.15s",
-                }}>{n}<span style={{ fontSize: 9, fontWeight: 400, color: CL.textMuted }}>{9 - count}</span></button>
+                  fontSize: 24, fontWeight: 700, cursor: done ? "default" : "pointer", opacity: done ? 0.4 : 1,
+                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, transition: "all 0.15s",
+                }}>{n}<span style={{ fontSize: 11, fontWeight: 500, color: CL.textMuted }}>{9 - count}</span></button>
               );
             })}
           </div>
 
           {/* ACTIONS */}
-          <div style={{ display: "flex", gap: 6, marginTop: 10, justifyContent: "center", flexWrap: "wrap" }}>
-            <button onClick={function () { setPencilMode(function (p) { return !p; }); }} style={{ padding: "7px 12px", borderRadius: 8, border: "1.5px solid " + (pencilMode ? CL.primary : CL.border), background: pencilMode ? CL.primaryDim : CL.surface, color: pencilMode ? CL.primaryLight : CL.textDim, cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-              {"Pencil" + (pencilMode ? " ON" : "")} <span style={{ fontSize: 9, background: CL.surfaceLight, padding: "1px 4px", borderRadius: 3, color: CL.textMuted }}>P</span>
+          <div style={{ display: "flex", gap: 8, marginTop: 14, justifyContent: "center", flexWrap: "wrap" }}>
+            <button onClick={function () { setPencilMode(function (p) { return !p; }); }} style={{ padding: "9px 14px", borderRadius: 10, border: "1.5px solid " + (pencilMode ? CL.primary : CL.border), background: pencilMode ? CL.primaryDim : CL.surface, color: pencilMode ? CL.primaryLight : CL.textDim, cursor: "pointer", fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+              {"Pencil" + (pencilMode ? " ON" : "")} <span style={{ fontSize: 10, background: CL.surfaceLight, padding: "2px 5px", borderRadius: 4, color: CL.textMuted, fontWeight: 600 }}>P</span>
             </button>
-            <button onClick={eraseCell} style={{ padding: "7px 12px", borderRadius: 8, border: "1.5px solid " + CL.border, background: CL.surface, color: CL.textDim, cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-              Erase <span style={{ fontSize: 9, background: CL.surfaceLight, padding: "1px 4px", borderRadius: 3, color: CL.textMuted }}>Del</span>
+            <button onClick={eraseCell} style={{ padding: "9px 14px", borderRadius: 10, border: "1.5px solid " + CL.border, background: CL.surface, color: CL.textDim, cursor: "pointer", fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+              Erase <span style={{ fontSize: 10, background: CL.surfaceLight, padding: "2px 5px", borderRadius: 4, color: CL.textMuted, fontWeight: 600 }}>Del</span>
             </button>
-            <button onClick={undo} style={{ padding: "7px 12px", borderRadius: 8, border: "1.5px solid " + CL.border, background: CL.surface, color: CL.textDim, cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-              Undo <span style={{ fontSize: 9, background: CL.surfaceLight, padding: "1px 4px", borderRadius: 3, color: CL.textMuted }}>Ctrl+Z</span>
+            <button onClick={undo} style={{ padding: "9px 14px", borderRadius: 10, border: "1.5px solid " + CL.border, background: CL.surface, color: CL.textDim, cursor: "pointer", fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+              Undo <span style={{ fontSize: 10, background: CL.surfaceLight, padding: "2px 5px", borderRadius: 4, color: CL.textMuted, fontWeight: 600 }}>Ctrl+Z</span>
             </button>
-            <button onClick={requestHint} style={{ padding: "7px 12px", borderRadius: 8, border: "1.5px solid " + CL.border, background: CL.surface, color: CL.textDim, cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-              Hint <span style={{ fontSize: 9, background: CL.surfaceLight, padding: "1px 4px", borderRadius: 3, color: CL.textMuted }}>H</span>
+            <button onClick={requestHint} style={{ padding: "9px 14px", borderRadius: 10, border: "1.5px solid " + CL.border, background: CL.surface, color: CL.textDim, cursor: "pointer", fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+              Hint <span style={{ fontSize: 10, background: CL.surfaceLight, padding: "2px 5px", borderRadius: 4, color: CL.textMuted, fontWeight: 600 }}>H</span>
             </button>
-            <button onClick={fillAllCandidates} style={{ padding: "7px 12px", borderRadius: 8, border: "1.5px solid " + CL.border, background: CL.surface, color: CL.textDim, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+            <button onClick={fillAllCandidates} style={{ padding: "9px 14px", borderRadius: 10, border: "1.5px solid " + CL.border, background: CL.surface, color: CL.textDim, cursor: "pointer", fontSize: 14, fontWeight: 600 }}>
               Fill Candidates
             </button>
           </div>
 
-          <div style={{ display: "flex", gap: 16, marginTop: 10, justifyContent: "center", fontSize: 12 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, color: CL.textDim, cursor: "pointer" }}>
-              <input type="checkbox" checked={autoCheck} onChange={function () { setAutoCheck(function (a) { return !a; }); }} style={{ accentColor: CL.primary }} />Auto-check
+          <div style={{ display: "flex", gap: 20, marginTop: 14, justifyContent: "center", fontSize: 14 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, color: CL.textDim, cursor: "pointer", fontWeight: 500 }}>
+              <input type="checkbox" checked={autoCheck} onChange={function () { setAutoCheck(function (a) { return !a; }); }} style={{ accentColor: CL.primary, width: 16, height: 16 }} />Auto-check
             </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, color: CL.textDim, cursor: "pointer" }}>
-              <input type="checkbox" checked={showCandidates} onChange={function () { setShowCandidates(function (s) { return !s; }); }} style={{ accentColor: CL.primary }} />Show candidates
+            <label style={{ display: "flex", alignItems: "center", gap: 8, color: CL.textDim, cursor: "pointer", fontWeight: 500 }}>
+              <input type="checkbox" checked={showCandidates} onChange={function () { setShowCandidates(function (s) { return !s; }); }} style={{ accentColor: CL.primary, width: 16, height: 16 }} />Show candidates
             </label>
           </div>
         </div>
 
         {/* RIGHT PANEL */}
-        <div style={{ width: 300, minWidth: 260 }}>
+        <div style={{ width: 320, minWidth: 280 }}>
           {currentHint && (
-            <div style={{ background: CL.hintDim, border: "1.5px solid " + CL.hint, borderRadius: 12, padding: 14, marginBottom: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: CL.hint, textTransform: "uppercase", letterSpacing: 0.5 }}>{"Hint: " + currentHint.type}</span>
+            <div style={{ background: CL.hintDim, border: "1.5px solid " + CL.hint, borderRadius: 14, padding: 16, marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: CL.hint, textTransform: "uppercase", letterSpacing: 0.5 }}>{"Hint: " + currentHint.type}</span>
                 {currentHint.difficulty && (
-                  <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, fontWeight: 600,
+                  <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 10, fontWeight: 600,
                     background: currentHint.difficulty === "Beginner" ? CL.successDim : currentHint.difficulty === "Intermediate" ? CL.warningDim : CL.errorDim,
                     color: currentHint.difficulty === "Beginner" ? CL.success : currentHint.difficulty === "Intermediate" ? CL.warning : CL.error,
                   }}>{currentHint.difficulty}</span>
                 )}
               </div>
-              <div style={{ fontSize: 13, color: CL.text, lineHeight: 1.5 }}>{currentHint.explanation}</div>
+              <div style={{ fontSize: 14, color: CL.text, lineHeight: 1.55 }}>{currentHint.explanation}</div>
               {(currentHint.highlights.length > 0 || currentHint.eliminations.length > 0) && (
                 <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: 11, color: CL.textMuted, flexWrap: "wrap" }}>
                   {currentHint.highlights.some(function (h) { return h.color === HL.trigger; }) && <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: HL.trigger + "44", border: "2px solid " + HL.trigger, verticalAlign: "middle", marginRight: 3 }} />Pattern</span>}
@@ -1681,47 +1681,48 @@ function SudokuTrainer() {
             </div>
           )}
 
-          <div style={{ background: CL.surface, borderRadius: 12, padding: 14, marginBottom: 12, border: "1px solid " + CL.border }}>
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Session Stats</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              <div style={{ textAlign: "center" }}><div style={{ fontSize: 20, fontWeight: 700, color: CL.warning }}>{hintsUsed}</div><div style={{ fontSize: 11, color: CL.textMuted }}>Hints</div></div>
-              <div style={{ textAlign: "center" }}><div style={{ fontSize: 20, fontWeight: 700, color: CL.success }}>{board.flat().filter(function (v) { return v !== 0; }).length + "/81"}</div><div style={{ fontSize: 11, color: CL.textMuted }}>Filled</div></div>
-              <div style={{ textAlign: "center" }}><div style={{ fontSize: 20, fontWeight: 700, color: CL.error }}>{errorCount}</div><div style={{ fontSize: 11, color: CL.textMuted }}>Errors</div></div>
-              <div style={{ textAlign: "center" }}><div style={{ fontSize: 20, fontWeight: 700, color: CL.primaryLight }}>{Object.values(stats).flat().length}</div><div style={{ fontSize: 11, color: CL.textMuted }}>Games</div></div>
+          <div style={{ background: CL.surface, borderRadius: 14, padding: 18, marginBottom: 14, border: "1px solid " + CL.border, boxShadow: "0 1px 2px rgba(24,24,27,0.03)" }}>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, letterSpacing: "-0.2px" }}>Session Stats</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div style={{ textAlign: "center" }}><div style={{ fontSize: 26, fontWeight: 700, color: CL.warning, fontVariantNumeric: "tabular-nums" }}>{hintsUsed}</div><div style={{ fontSize: 12, color: CL.textMuted, marginTop: 2, fontWeight: 500 }}>Hints</div></div>
+              <div style={{ textAlign: "center" }}><div style={{ fontSize: 26, fontWeight: 700, color: CL.success, fontVariantNumeric: "tabular-nums" }}>{board.flat().filter(function (v) { return v !== 0; }).length + "/81"}</div><div style={{ fontSize: 12, color: CL.textMuted, marginTop: 2, fontWeight: 500 }}>Filled</div></div>
+              <div style={{ textAlign: "center" }}><div style={{ fontSize: 26, fontWeight: 700, color: CL.error, fontVariantNumeric: "tabular-nums" }}>{errorCount}</div><div style={{ fontSize: 12, color: CL.textMuted, marginTop: 2, fontWeight: 500 }}>Errors</div></div>
+              <div style={{ textAlign: "center" }}><div style={{ fontSize: 26, fontWeight: 700, color: CL.primaryLight, fontVariantNumeric: "tabular-nums" }}>{Object.values(stats).flat().length}</div><div style={{ fontSize: 12, color: CL.textMuted, marginTop: 2, fontWeight: 500 }}>Games</div></div>
             </div>
             {Object.keys(techCounts).length > 0 && (
-              <div style={{ marginTop: 10, borderTop: "1px solid " + CL.border, paddingTop: 8 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: CL.textDim, marginBottom: 4 }}>Techniques this game:</div>
+              <div style={{ marginTop: 14, borderTop: "1px solid " + CL.border, paddingTop: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: CL.textDim, marginBottom: 6 }}>Techniques this game:</div>
                 {Object.keys(techCounts).map(function (name) {
-                  return <div key={name} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: CL.textMuted, padding: "2px 0" }}><span>{name}</span><span style={{ color: CL.primaryLight }}>{techCounts[name] + "x"}</span></div>;
+                  return <div key={name} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: CL.textMuted, padding: "3px 0" }}><span>{name}</span><span style={{ color: CL.primaryLight, fontWeight: 600 }}>{techCounts[name] + "x"}</span></div>;
                 })}
               </div>
             )}
           </div>
 
           <button onClick={function () { setShowTechniques(function (s) { return !s; }); }} style={{
-            width: "100%", padding: "10px 14px", borderRadius: 10, border: "1.5px solid " + CL.border,
-            background: CL.surface, color: CL.text, cursor: "pointer", fontSize: 13, fontWeight: 600,
-            textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12,
+            width: "100%", padding: "13px 16px", borderRadius: 12, border: "1px solid " + CL.border,
+            background: CL.surface, color: CL.text, cursor: "pointer", fontSize: 14, fontWeight: 600,
+            textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14,
+            boxShadow: "0 1px 2px rgba(24,24,27,0.03)",
           }}>
             <span>{"Technique Encyclopedia (" + TECHNIQUES.length + ")"}</span>
-            <span style={{ fontSize: 18, lineHeight: 1 }}>{showTechniques ? "-" : "+"}</span>
+            <span style={{ fontSize: 20, lineHeight: 1, color: CL.textMuted }}>{showTechniques ? "\u2013" : "+"}</span>
           </button>
 
           {showTechniques && (
-            <div style={{ background: CL.surface, borderRadius: 12, padding: 14, border: "1px solid " + CL.border, maxHeight: 500, overflowY: "auto" }}>
+            <div style={{ background: CL.surface, borderRadius: 14, padding: 18, border: "1px solid " + CL.border, maxHeight: 540, overflowY: "auto", boxShadow: "0 1px 2px rgba(24,24,27,0.03)" }}>
               {TECHNIQUES.map(function (t, i) {
                 return (
-                  <div key={t.name} style={{ marginBottom: i < TECHNIQUES.length - 1 ? 14 : 0, paddingBottom: i < TECHNIQUES.length - 1 ? 14 : 0, borderBottom: i < TECHNIQUES.length - 1 ? "1px solid " + CL.border : "none" }}>
+                  <div key={t.name} style={{ marginBottom: i < TECHNIQUES.length - 1 ? 16 : 0, paddingBottom: i < TECHNIQUES.length - 1 ? 16 : 0, borderBottom: i < TECHNIQUES.length - 1 ? "1px solid " + CL.border : "none" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontWeight: 700, fontSize: 13 }}>{t.name}</span>
-                      <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, fontWeight: 600,
+                      <span style={{ fontWeight: 700, fontSize: 14 }}>{t.name}</span>
+                      <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 10, fontWeight: 600,
                         background: t.difficulty === "Beginner" ? CL.successDim : t.difficulty === "Intermediate" ? CL.warningDim : CL.errorDim,
                         color: t.difficulty === "Beginner" ? CL.success : t.difficulty === "Intermediate" ? CL.warning : CL.error,
                       }}>{t.difficulty}</span>
                     </div>
-                    <p style={{ fontSize: 12, color: CL.textDim, margin: "6px 0 4px", lineHeight: 1.5 }}>{t.desc}</p>
-                    <div style={{ fontSize: 11, color: CL.textMuted, background: CL.surfaceLight, padding: "6px 8px", borderRadius: 6, lineHeight: 1.4 }}>
+                    <p style={{ fontSize: 13, color: CL.textDim, margin: "8px 0 6px", lineHeight: 1.55 }}>{t.desc}</p>
+                    <div style={{ fontSize: 12, color: CL.textMuted, background: CL.surfaceLight, padding: "8px 10px", borderRadius: 8, lineHeight: 1.5 }}>
                       <strong style={{ color: CL.textDim }}>How to spot: </strong>{t.howTo}
                     </div>
                   </div>
@@ -1731,12 +1732,12 @@ function SudokuTrainer() {
           )}
 
           {!showTechniques && (
-            <div style={{ background: CL.surface, borderRadius: 12, padding: 14, border: "1px solid " + CL.border }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: CL.textDim, marginBottom: 8 }}>Keyboard Shortcuts</div>
-              {[["1-9", "Place number"], ["Arrows", "Navigate"], ["P", "Pencil mode"], ["H", "Get hint"], ["Del", "Erase"], ["Ctrl+Z", "Undo"]].map(function (pair) {
+            <div style={{ background: CL.surface, borderRadius: 14, padding: 18, border: "1px solid " + CL.border, boxShadow: "0 1px 2px rgba(24,24,27,0.03)" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: CL.textDim, marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.5 }}>Keyboard Shortcuts</div>
+              {[["1-9", "Place number"], ["\u2190\u2191\u2192\u2193", "Navigate"], ["P", "Pencil mode"], ["H", "Get hint"], ["Del", "Erase"], ["\u2318Z", "Undo"]].map(function (pair) {
                 return (
-                  <div key={pair[0]} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, padding: "3px 0", color: CL.textMuted }}>
-                    <span style={{ background: CL.surfaceLight, padding: "1px 6px", borderRadius: 4, fontFamily: "monospace", fontSize: 10, color: CL.textDim }}>{pair[0]}</span>
+                  <div key={pair[0]} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, padding: "5px 0", color: CL.textMuted }}>
+                    <span style={{ background: CL.surfaceLight, padding: "3px 9px", borderRadius: 6, fontFamily: "'SF Mono', Menlo, Monaco, Consolas, monospace", fontSize: 11, color: CL.textDim, fontWeight: 600, border: "1px solid " + CL.border }}>{pair[0]}</span>
                     <span>{pair[1]}</span>
                   </div>
                 );

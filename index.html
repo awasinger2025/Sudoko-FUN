@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Sudoku Trainer</title>
+<title>SUDOKU</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
@@ -1136,6 +1136,11 @@ function SudokuTrainer() {
   var stats = _stats[0], setStats = _stats[1];
   var _autoCheck = useState(false);
   var autoCheck = _autoCheck[0], setAutoCheck = _autoCheck[1];
+  // Strict-entry mode: "free" = anything goes, "lenient" = first 3 mistakes free, "strict" = no wrong entries.
+  var _strictMode = useState("lenient");
+  var strictMode = _strictMode[0], setStrictMode = _strictMode[1];
+  var _mistakeCount = useState(0);
+  var mistakeCount = _mistakeCount[0], setMistakeCount = _mistakeCount[1];
   var _showCands = useState(false);
   var showCandidates = _showCands[0], setShowCandidates = _showCands[1];
   var _techLog = useState([]);
@@ -1151,6 +1156,8 @@ function SudokuTrainer() {
   var practiceHint = _practiceHint[0], setPracticeHint = _practiceHint[1];
   var _practicePhase = useState("select"); // "select", "challenge", "revealed", "solved"
   var practicePhase = _practicePhase[0], setPracticePhase = _practicePhase[1];
+  var _practiceListOpen = useState(false);
+  var practiceListOpen = _practiceListOpen[0], setPracticeListOpen = _practiceListOpen[1];
   var _practiceStreak = useState(0);
   var practiceStreak = _practiceStreak[0], setPracticeStreak = _practiceStreak[1];
   var _practiceMastery = useState({});
@@ -1200,6 +1207,7 @@ function SudokuTrainer() {
       setHistory([]);
       setCompleted(false);
       setGenerating(false);
+      setMistakeCount(0);
     }, 50);
   };
 
@@ -1273,6 +1281,7 @@ function SudokuTrainer() {
     setSelected(null); setErrors({}); setHintsUsed(0); setCurrentHint(null);
     setTimer(0); setRunning(true); setCompleted(false); setHistory([]);
     setShowTechniques(false); setTechniqueLog([]);
+    setMistakeCount(0);
   };
 
   // Check completion
@@ -1295,6 +1304,26 @@ function SudokuTrainer() {
     if (pencilMode) {
       setMarks(function (prev) { return toggleMark(prev, r, c, num); });
     } else {
+      var isWrong = solution && solution[r][c] !== num;
+      // Strict mode: never let wrong entries through. Lenient: first 3 are flagged but allowed.
+      if (isWrong && strictMode === "strict") {
+        setErrors(function (prev) { var next = {}; for (var k in prev) next[k] = true; next[r + "," + c] = true; return next; });
+        setTimeout(function () {
+          setErrors(function (prev) { var next = {}; for (var k in prev) { if (k !== r + "," + c) next[k] = true; } return next; });
+        }, 400);
+        return;
+      }
+      if (isWrong && strictMode === "lenient") {
+        if (mistakeCount >= 3) {
+          // Out of free passes — block like strict mode.
+          setErrors(function (prev) { var next = {}; for (var k in prev) next[k] = true; next[r + "," + c] = true; return next; });
+          setTimeout(function () {
+            setErrors(function (prev) { var next = {}; for (var k in prev) { if (k !== r + "," + c) next[k] = true; } return next; });
+          }, 400);
+          return;
+        }
+        setMistakeCount(function (m) { return m + 1; });
+      }
       setHistory(function (prev) { return prev.concat([{ board: board.map(function (r) { return r.slice(); }), marks: cloneMarks(marks) }]); });
       setBoard(function (prev) { var next = prev.map(function (r) { return r.slice(); }); next[r][c] = num; return next; });
       setMarks(function (prev) {
@@ -1306,7 +1335,7 @@ function SudokuTrainer() {
         return next;
       });
       setCurrentHint(null);
-      if (autoCheck && solution && solution[r][c] !== num) {
+      if ((autoCheck || strictMode === "lenient") && isWrong) {
         setErrors(function (prev) { var next = {}; for (var k in prev) next[k] = true; next[r + "," + c] = true; return next; });
       }
     }
@@ -1444,10 +1473,9 @@ function SudokuTrainer() {
     <div style={{ minHeight: "100vh", background: CL.bg, color: CL.text, fontFamily: "'Inter',-apple-system,sans-serif", display: "flex", flexDirection: "column", alignItems: "center", padding: "28px 16px 40px", boxSizing: "border-box" }}>
       {/* Header */}
       <div style={{ textAlign: "center", marginBottom: 18 }}>
-        <h1 style={{ fontSize: 32, fontWeight: 800, margin: 0, letterSpacing: "-0.75px" }}>
-          <span style={{ color: CL.primaryLight }}>Sudoku</span> Trainer
+        <h1 style={{ fontSize: 32, fontWeight: 800, margin: 0, letterSpacing: "2px", color: CL.primaryLight }}>
+          SUDOKU
         </h1>
-        <p style={{ color: CL.textDim, fontSize: 13, margin: "6px 0 0", fontWeight: 500 }}>17 technique detectors · Practice Zone included</p>
       </div>
 
       {/* Mode Switcher */}
@@ -1479,13 +1507,20 @@ function SudokuTrainer() {
 
       {/* PRACTICE ZONE: Technique Selector */}
       {mode === "practice" && practicePhase === "select" && (
-        <div style={{ maxWidth: 700, width: "100%", marginBottom: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <div style={{ maxWidth: 760, width: "100%", marginBottom: 16 }}>
+          <button onClick={function () { setPracticeListOpen(function (o) { return !o; }); }} style={{
+            width: "100%", padding: "14px 18px", borderRadius: 12, border: "1px solid " + CL.border,
+            background: CL.surface, color: CL.text, cursor: "pointer", fontSize: 15, fontWeight: 700,
+            textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center",
+            marginBottom: practiceListOpen ? 12 : 0, boxShadow: "0 1px 2px rgba(24,24,27,0.03)",
+          }}>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 700 }}>Choose a Technique to Practice</div>
-              <div style={{ fontSize: 12, color: CL.textMuted }}>{"Streak: " + practiceStreak + " | Total solved: " + Object.values(practiceMastery).reduce(function (a, b) { return a + (b.solved || 0); }, 0)}</div>
+              <div style={{ letterSpacing: "-0.2px" }}>Choose a Technique to Practice</div>
+              <div style={{ fontSize: 12, color: CL.textMuted, fontWeight: 500, marginTop: 2 }}>{"Streak: " + practiceStreak + " \u00b7 Total solved: " + Object.values(practiceMastery).reduce(function (a, b) { return a + (b.solved || 0); }, 0)}</div>
             </div>
-          </div>
+            <span style={{ fontSize: 22, lineHeight: 1, color: CL.textMuted, fontWeight: 600, marginLeft: 12 }}>{practiceListOpen ? "\u2013" : "+"}</span>
+          </button>
+          {practiceListOpen && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 8 }}>
             {PRACTICE_TECHNIQUES.map(function (tech) {
               var mastery = getMasteryLevel(tech.name);
@@ -1516,6 +1551,7 @@ function SudokuTrainer() {
               );
             })}
           </div>
+          )}
         </div>
       )}
 
@@ -1640,6 +1676,34 @@ function SudokuTrainer() {
             <label style={{ display: "flex", alignItems: "center", gap: 10, color: CL.text, cursor: "pointer", fontSize: 14, fontWeight: 500, padding: "6px 0" }}>
               <input type="checkbox" checked={showCandidates} onChange={function () { setShowCandidates(function (s) { return !s; }); }} style={{ accentColor: CL.primary, width: 16, height: 16 }} />Show candidates
             </label>
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed " + CL.border }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: CL.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>Entry Mode</div>
+              {[
+                { id: "free", label: "Free play", sub: "All entries allowed" },
+                { id: "lenient", label: "Sorta strict", sub: "First 3 mistakes free" },
+                { id: "strict", label: "Strict", sub: "Wrong entries blocked" },
+              ].map(function (opt) {
+                var active = strictMode === opt.id;
+                return (
+                  <button key={opt.id} onClick={function () { setStrictMode(opt.id); }} style={{
+                    display: "block", width: "100%", textAlign: "left", marginBottom: 4,
+                    padding: "8px 10px", borderRadius: 8,
+                    border: "1.5px solid " + (active ? CL.primary : CL.border),
+                    background: active ? CL.primaryDim : CL.surface,
+                    color: active ? CL.primaryLight : CL.text,
+                    cursor: "pointer", fontSize: 13, fontWeight: 600,
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span>{opt.label}</span>
+                      {active && opt.id === "lenient" && (
+                        <span style={{ fontSize: 10, padding: "2px 6px", borderRadius: 6, background: CL.surface, border: "1px solid " + CL.border, color: CL.textDim, fontWeight: 700 }}>{Math.max(0, 3 - mistakeCount) + " left"}</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 10, fontWeight: 500, color: CL.textMuted, marginTop: 1 }}>{opt.sub}</div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div style={{ background: CL.surface, borderRadius: 14, padding: 16, border: "1px solid " + CL.border, boxShadow: "0 1px 2px rgba(24,24,27,0.03)" }}>
@@ -1659,19 +1723,46 @@ function SudokuTrainer() {
         <div className="col-center">
           {/* BOARD */}
           <div style={{ display: "inline-grid", gridTemplateColumns: "repeat(9,1fr)", gap: 0, border: "1.5px solid " + CL.borderThick, borderRadius: 14, overflow: "hidden", background: CL.border, boxShadow: "0 1px 2px rgba(24,24,27,0.04), 0 8px 24px -8px rgba(24,24,27,0.08)" }}>
-            {board.map(function (row, r) {
+            {(function () {
+              // Precompute positions of all cells containing selectedValue, to grey out
+              // every cell they eliminate (same row, col, or 3x3 box).
+              var elimSet = {};
+              if (selectedValue && selectedValue !== 0) {
+                for (var rr = 0; rr < 9; rr++) {
+                  for (var cc = 0; cc < 9; cc++) {
+                    if (board[rr][cc] === selectedValue) {
+                      var br = Math.floor(rr / 3), bc = Math.floor(cc / 3);
+                      for (var k = 0; k < 9; k++) {
+                        elimSet[rr + "," + k] = true;
+                        elimSet[k + "," + cc] = true;
+                      }
+                      for (var dr = 0; dr < 3; dr++) {
+                        for (var dc = 0; dc < 3; dc++) {
+                          elimSet[(br * 3 + dr) + "," + (bc * 3 + dc)] = true;
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              return board.map(function (row, r) {
               return row.map(function (val, c) {
                 var isGiven = puzzle[r][c] !== 0;
                 var isSelected = selected && selected[0] === r && selected[1] === c;
                 var isError = errors[r + "," + c];
                 var isSameNum = selectedValue && selectedValue !== 0 && val === selectedValue;
                 var isRelated = selected && (selected[0] === r || selected[1] === c || (Math.floor(selected[0] / 3) === Math.floor(r / 3) && Math.floor(selected[1] / 3) === Math.floor(c / 3)));
+                // A cell is "unavailable" for the selected number if it either
+                //   (a) already holds a different digit, or
+                //   (b) sits in the row/col/box of a cell that already holds selectedValue.
+                var isNumEliminated = selectedValue && selectedValue !== 0 && !isSameNum && (val !== 0 || elimSet[r + "," + c]);
                 var hlInfo = hlMap[r + "," + c];
                 var bg = CL.surface;
                 if (hlInfo) bg = hlInfo.color + "22";
                 else if (isSelected) bg = CL.selected;
                 else if (isError) bg = CL.errorDim;
                 else if (isSameNum) bg = CL.sameNum;
+                else if (isNumEliminated) bg = "rgba(24,24,27,0.06)";
                 else if (isRelated) bg = CL.related;
                 var cellMarks = getMarkList(marks, r, c);
                 var autoCands = showCandidates && val === 0 ? getCandidates(board, r, c) : [];
@@ -1703,7 +1794,8 @@ function SudokuTrainer() {
                   </div>
                 );
               });
-            })}
+            });
+            })()}
           </div>
 
           {/* NUMBER PAD */}

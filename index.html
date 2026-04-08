@@ -1508,11 +1508,1883 @@ function QuartilesGame() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// FREECELL GAME (card game side mode)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const FC_SUITS = [
+  { symbol: "\u2660", color: "black", name: "spades" },   // ♠
+  { symbol: "\u2665", color: "red",   name: "hearts" },   // ♥
+  { symbol: "\u2666", color: "red",   name: "diamonds" }, // ♦
+  { symbol: "\u2663", color: "black", name: "clubs" },    // ♣
+];
+const FC_RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+
+function fcMakeDeck() {
+  var deck = [];
+  for (var s = 0; s < 4; s++) for (var r = 1; r <= 13; r++) deck.push({ rank: r, suit: s });
+  return deck;
+}
+function fcShuffle(arr) {
+  var a = arr.slice();
+  for (var i = a.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+  }
+  return a;
+}
+function fcDeal() {
+  var deck = fcShuffle(fcMakeDeck());
+  var tab = [[], [], [], [], [], [], [], []];
+  for (var i = 0; i < 52; i++) tab[i % 8].push(deck[i]);
+  return tab;
+}
+function fcCardColor(c) { return FC_SUITS[c.suit].color; }
+function fcCanPlaceOnFoundation(card, foundation) {
+  if (foundation.length === 0) return card.rank === 1;
+  var top = foundation[foundation.length - 1];
+  return top.suit === card.suit && top.rank === card.rank - 1;
+}
+function fcCanPlaceOnTableau(card, col) {
+  if (col.length === 0) return true;
+  var top = col[col.length - 1];
+  return fcCardColor(card) !== fcCardColor(top) && card.rank === top.rank - 1;
+}
+function fcIsValidSequence(cards) {
+  for (var i = 1; i < cards.length; i++) {
+    var prev = cards[i - 1], curr = cards[i];
+    if (fcCardColor(prev) === fcCardColor(curr) || prev.rank !== curr.rank + 1) return false;
+  }
+  return true;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SHARED PLAYING-CARD HELPERS (used by Klondike, Spider, Yukon, TriPeaks)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+var PC_COLORS = {
+  surface: "#ffffff", border: "#e4e4e7", borderThick: "#a1a1aa",
+  red: "#dc2626", black: "#18181b", textMuted: "#a1a1aa",
+  primary: "#4f46e5", primaryDim: "rgba(79,70,229,0.10)",
+  back: "#3730a3", backLine: "#6366f1",
+};
+
+// Four distinct card-back palettes, one per solitaire game
+var PC_BACKS = {
+  // Klondike — Classic red diamond (Bicycle-style)
+  red: {
+    borderColor: "#5c0a0a",
+    style: {
+      background: "#9c1818",
+      backgroundImage:
+        "repeating-linear-gradient(45deg, rgba(255,240,220,0.18) 0 2px, transparent 2px 11px)," +
+        "repeating-linear-gradient(-45deg, rgba(255,240,220,0.18) 0 2px, transparent 2px 11px)",
+      boxShadow: "inset 0 0 0 3px #9c1818, inset 0 0 0 4px rgba(255,245,230,0.88), inset 0 0 0 6px #9c1818, 0 1px 3px rgba(24,24,27,0.18)",
+    },
+  },
+  // Yukon — Dark casino felt with gold inner border
+  felt: {
+    borderColor: "#062219",
+    style: {
+      background: "radial-gradient(ellipse at center, #145438 0%, #0a3522 100%)",
+      boxShadow: "inset 0 0 0 3px #0a3522, inset 0 0 0 4px rgba(201,167,74,0.85), inset 0 0 0 6px #0a3522, inset 0 0 18px rgba(0,0,0,0.35), 0 1px 3px rgba(24,24,27,0.20)",
+    },
+  },
+  // Spider — Pinstripe graphite
+  pinstripe: {
+    borderColor: "#0a0e17",
+    style: {
+      background: "#1f2937",
+      backgroundImage:
+        "repeating-linear-gradient(45deg, rgba(255,255,255,0.12) 0 1px, transparent 1px 6px)",
+      boxShadow: "inset 0 0 0 3px #1f2937, inset 0 0 0 4px rgba(255,255,255,0.16), inset 0 0 0 5px #1f2937, 0 1px 3px rgba(24,24,27,0.20)",
+    },
+  },
+  // TriPeaks — Subtle warm ivory with faint dot pattern
+  subtle: {
+    borderColor: "#d6d3d1",
+    style: {
+      background: "#faf7f0",
+      backgroundImage: "radial-gradient(circle, rgba(120,113,108,0.28) 1px, transparent 1.5px)",
+      backgroundSize: "11px 11px",
+      boxShadow: "inset 0 0 0 2px rgba(120,113,108,0.20), 0 1px 3px rgba(24,24,27,0.12)",
+    },
+  },
+};
+
+function pcMakeDeck(numDecks, suitsAllowed) {
+  numDecks = numDecks || 1;
+  suitsAllowed = suitsAllowed || [0, 1, 2, 3];
+  var deck = [];
+  var idCounter = 0;
+  for (var d = 0; d < numDecks; d++) {
+    for (var si = 0; si < suitsAllowed.length; si++) {
+      var s = suitsAllowed[si];
+      for (var r = 1; r <= 13; r++) {
+        deck.push({ rank: r, suit: s, faceUp: false, id: "c" + (idCounter++) });
+      }
+    }
+  }
+  return deck;
+}
+
+function pcShuffle(arr) {
+  var a = arr.slice();
+  for (var i = a.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+  }
+  return a;
+}
+
+function pcCardColor(c) { return FC_SUITS[c.suit].color; }
+
+function pcCanFoundation(card, foundation) {
+  if (foundation.length === 0) return card.rank === 1;
+  var top = foundation[foundation.length - 1];
+  return card.suit === top.suit && card.rank === top.rank + 1;
+}
+
+// Tableau alt-color descending (Klondike & Yukon)
+function pcCanTableauAlt(card, destTop, allowAnyOnEmpty) {
+  if (!destTop) return allowAnyOnEmpty ? true : card.rank === 13;
+  return pcCardColor(card) !== pcCardColor(destTop) && card.rank === destTop.rank - 1;
+}
+
+function pcIsValidAltSequence(cards) {
+  for (var i = 1; i < cards.length; i++) {
+    if (!cards[i - 1].faceUp || !cards[i].faceUp) return false;
+    if (pcCardColor(cards[i - 1]) === pcCardColor(cards[i])) return false;
+    if (cards[i - 1].rank !== cards[i].rank + 1) return false;
+  }
+  return true;
+}
+
+// Spider helper: in-suit descending sequence from index onward
+function pcSpiderRunFrom(col, idx) {
+  if (idx >= col.length) return null;
+  if (!col[idx].faceUp) return null;
+  for (var i = idx; i < col.length - 1; i++) {
+    if (!col[i + 1].faceUp) return null;
+    if (col[i].suit !== col[i + 1].suit) return null;
+    if (col[i].rank !== col[i + 1].rank + 1) return null;
+  }
+  return col.slice(idx);
+}
+
+// Module-level card renderer used by all four solitaire games
+function renderPlayingCard(card, opts) {
+  opts = opts || {};
+  var w = opts.width || 72;
+  var h = opts.height || 100;
+  var radius = opts.radius || 8;
+  if (!card.faceUp) {
+    var backKey = opts.back || card.back || "red";
+    var backDef = PC_BACKS[backKey] || PC_BACKS.red;
+    var baseStyle = {
+      width: w, height: h, borderRadius: radius,
+      border: "1.5px solid " + backDef.borderColor,
+      cursor: opts.onClick ? "pointer" : "default",
+    };
+    return (
+      <div onClick={opts.onClick} style={Object.assign(baseStyle, backDef.style)} />
+    );
+  }
+  var suit = FC_SUITS[card.suit];
+  var color = suit.color === "red" ? PC_COLORS.red : PC_COLORS.black;
+  var isSel = opts.selected;
+  var isDim = opts.dimmed;
+  return (
+    <div onClick={opts.onClick} onDoubleClick={opts.onDoubleClick} style={{
+      width: w, height: h, borderRadius: radius, background: PC_COLORS.surface,
+      border: "1.5px solid " + (isSel ? PC_COLORS.primary : PC_COLORS.border),
+      boxShadow: isSel ? "0 0 0 3px " + PC_COLORS.primaryDim + ", 0 3px 8px rgba(24,24,27,0.10)" : "0 1px 3px rgba(24,24,27,0.10)",
+      cursor: opts.onClick ? "pointer" : "default", userSelect: "none",
+      display: "flex", flexDirection: "column", transition: "all 0.08s",
+      opacity: isDim ? 0.45 : 1,
+    }}>
+      <div style={{ padding: "5px 7px 0", fontSize: 16, fontWeight: 800, color: color, lineHeight: 1, fontFamily: "'Inter',sans-serif" }}>
+        {FC_RANKS[card.rank - 1]}
+      </div>
+      <div style={{ padding: "0 7px", fontSize: 14, color: color, lineHeight: 1, marginTop: 1 }}>
+        {suit.symbol}
+      </div>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, color: color, marginTop: -4 }}>
+        {suit.symbol}
+      </div>
+    </div>
+  );
+}
+
+function renderPlayingSlot(opts) {
+  opts = opts || {};
+  var w = opts.width || 72;
+  var h = opts.height || 100;
+  return (
+    <div onClick={opts.onClick} style={{
+      width: w, height: h, borderRadius: opts.radius || 8,
+      border: "1.5px dashed " + PC_COLORS.borderThick,
+      background: opts.bg || "#f4f4f5", cursor: opts.onClick ? "pointer" : "default",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      color: opts.labelColor || PC_COLORS.textMuted, fontSize: opts.fontSize || 24, fontWeight: 700,
+    }}>{opts.label || ""}</div>
+  );
+}
+
+function FreeCellGame() {
+  var CLf = {
+    bg: "#fafafa", surface: "#ffffff", surfaceLight: "#f4f4f5",
+    border: "#e4e4e7", borderThick: "#a1a1aa",
+    text: "#18181b", textDim: "#52525b", textMuted: "#a1a1aa",
+    primary: "#4f46e5", primaryLight: "#4338ca", primaryDim: "rgba(79,70,229,0.08)",
+    success: "#10b981", successDim: "rgba(16,185,129,0.10)",
+    error: "#ef4444", errorDim: "rgba(239,68,68,0.08)",
+    red: "#dc2626", black: "#18181b",
+    felt: "#f4f4f5",
+  };
+
+  var _game = useState(function () { return {
+    freeCells: [null, null, null, null],
+    foundations: [[], [], [], []],
+    tableau: fcDeal(),
+  }; });
+  var game = _game[0], setGame = _game[1];
+  var _selected = useState(null); // { zone: 'tableau'|'free', col, idx? }
+  var selected = _selected[0], setSelected = _selected[1];
+  var _history = useState([]);
+  var history = _history[0], setHistory = _history[1];
+  var _moves = useState(0);
+  var moves = _moves[0], setMoves = _moves[1];
+  var _time = useState(0);
+  var time = _time[0], setTime = _time[1];
+  var _running = useState(true);
+  var running = _running[0], setRunning = _running[1];
+  var _won = useState(false);
+  var won = _won[0], setWon = _won[1];
+  var _flash = useState(null);
+  var flash = _flash[0], setFlash = _flash[1];
+
+  var fcTimerRef = useRef(null);
+  useEffect(function () {
+    if (running && !won) {
+      fcTimerRef.current = setInterval(function () { setTime(function (t) { return t + 1; }); }, 1000);
+    }
+    return function () { clearInterval(fcTimerRef.current); };
+  }, [running, won]);
+
+  // Win check
+  useEffect(function () {
+    var total = game.foundations.reduce(function (a, f) { return a + f.length; }, 0);
+    if (total === 52 && !won) { setWon(true); setRunning(false); }
+  }, [game]);
+
+  var fmtTime = function (s) {
+    return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+  };
+
+  var snapshot = function () {
+    return {
+      freeCells: game.freeCells.slice(),
+      foundations: game.foundations.map(function (f) { return f.slice(); }),
+      tableau: game.tableau.map(function (c) { return c.slice(); }),
+    };
+  };
+
+  var maxMoveSize = function (destColIsEmpty) {
+    var freeCount = game.freeCells.filter(function (c) { return !c; }).length;
+    var emptyCols = game.tableau.filter(function (col) { return col.length === 0; }).length;
+    if (destColIsEmpty) emptyCols = Math.max(0, emptyCols - 1);
+    return (freeCount + 1) * Math.pow(2, emptyCols);
+  };
+
+  var rejectFlash = function () {
+    setFlash("error");
+    setTimeout(function () { setFlash(null); }, 220);
+    setSelected(null);
+  };
+
+  var commit = function (nextGame) {
+    setHistory(history.concat([snapshot()]));
+    setGame(nextGame);
+    setMoves(moves + 1);
+    setSelected(null);
+  };
+
+  var getSelectionCards = function () {
+    if (!selected) return null;
+    if (selected.zone === "free") {
+      var c = game.freeCells[selected.col];
+      return c ? [c] : null;
+    }
+    if (selected.zone === "tableau") {
+      return game.tableau[selected.col].slice(selected.idx);
+    }
+    return null;
+  };
+
+  var clearFromSource = function (g) {
+    if (selected.zone === "free") g.freeCells[selected.col] = null;
+    else if (selected.zone === "tableau") g.tableau[selected.col] = g.tableau[selected.col].slice(0, selected.idx);
+  };
+
+  var clickTableauCard = function (colIdx, cardIdx) {
+    var col = game.tableau[colIdx];
+    if (!selected) {
+      // Must click start of a valid descending alt-color sequence
+      var seq = col.slice(cardIdx);
+      if (seq.length === 0 || !fcIsValidSequence(seq)) { rejectFlash(); return; }
+      setSelected({ zone: "tableau", col: colIdx, idx: cardIdx });
+      return;
+    }
+    // Moving INTO this column
+    tryMoveToTableau(colIdx);
+  };
+
+  var clickTableauEmpty = function (colIdx) {
+    if (!selected) return;
+    tryMoveToTableau(colIdx);
+  };
+
+  var tryMoveToTableau = function (destColIdx) {
+    var sel = getSelectionCards();
+    if (!sel || sel.length === 0) { rejectFlash(); return; }
+    if (selected.zone === "tableau" && selected.col === destColIdx) { setSelected(null); return; }
+    var destCol = game.tableau[destColIdx];
+    var destEmpty = destCol.length === 0;
+    if (!destEmpty) {
+      var top = destCol[destCol.length - 1];
+      if (fcCardColor(sel[0]) === fcCardColor(top) || sel[0].rank !== top.rank - 1) { rejectFlash(); return; }
+    }
+    if (sel.length > maxMoveSize(destEmpty)) { rejectFlash(); return; }
+    var g = snapshot();
+    for (var i = 0; i < sel.length; i++) g.tableau[destColIdx].push(sel[i]);
+    clearFromSource(g);
+    commit(g);
+  };
+
+  var clickFreeCell = function (slotIdx) {
+    if (!selected) {
+      if (game.freeCells[slotIdx]) setSelected({ zone: "free", col: slotIdx });
+      return;
+    }
+    var sel = getSelectionCards();
+    if (!sel || sel.length !== 1) { rejectFlash(); return; }
+    if (game.freeCells[slotIdx] !== null) { rejectFlash(); return; }
+    var g = snapshot();
+    g.freeCells[slotIdx] = sel[0];
+    clearFromSource(g);
+    commit(g);
+  };
+
+  var clickFoundation = function (slotIdx) {
+    if (!selected) return;
+    var sel = getSelectionCards();
+    if (!sel || sel.length !== 1) { rejectFlash(); return; }
+    if (!fcCanPlaceOnFoundation(sel[0], game.foundations[slotIdx])) { rejectFlash(); return; }
+    var g = snapshot();
+    g.foundations[slotIdx].push(sel[0]);
+    clearFromSource(g);
+    commit(g);
+  };
+
+  // Double-click: auto-move to foundation if legal
+  var autoToFoundation = function (source) {
+    var card, g = snapshot();
+    if (source.zone === "tableau") {
+      var col = g.tableau[source.col];
+      if (col.length === 0) return false;
+      card = col[col.length - 1];
+    } else if (source.zone === "free") {
+      card = g.freeCells[source.col];
+      if (!card) return false;
+    }
+    if (!fcCanPlaceOnFoundation(card, g.foundations[card.suit])) return false;
+    g.foundations[card.suit].push(card);
+    if (source.zone === "tableau") g.tableau[source.col].pop();
+    else g.freeCells[source.col] = null;
+    setHistory(history.concat([snapshot()]));
+    setGame(g);
+    setMoves(moves + 1);
+    setSelected(null);
+    return true;
+  };
+
+  // Auto Clear: send every legally-eligible card to its foundation in a loop.
+  // Only single cards from free cells or tops of tableau columns — never moves stacks.
+  var autoClear = function () {
+    var pre = snapshot();
+    var g = snapshot();
+    var movedCount = 0;
+    var changed = true;
+    while (changed) {
+      changed = false;
+      for (var i = 0; i < 4; i++) {
+        var fc = g.freeCells[i];
+        if (fc && fcCanPlaceOnFoundation(fc, g.foundations[fc.suit])) {
+          g.foundations[fc.suit].push(fc);
+          g.freeCells[i] = null;
+          changed = true;
+          movedCount++;
+        }
+      }
+      for (var col = 0; col < g.tableau.length; col++) {
+        var t = g.tableau[col];
+        if (t.length > 0) {
+          var topCard = t[t.length - 1];
+          if (fcCanPlaceOnFoundation(topCard, g.foundations[topCard.suit])) {
+            g.foundations[topCard.suit].push(topCard);
+            g.tableau[col] = t.slice(0, -1);
+            changed = true;
+            movedCount++;
+          }
+        }
+      }
+    }
+    if (movedCount === 0) { rejectFlash(); return; }
+    setHistory(history.concat([pre]));
+    setGame(g);
+    setMoves(moves + movedCount);
+    setSelected(null);
+  };
+
+  var undo = function () {
+    if (history.length === 0) return;
+    setGame(history[history.length - 1]);
+    setHistory(history.slice(0, -1));
+    setSelected(null);
+    setWon(false);
+    setRunning(true);
+  };
+
+  var newGame = function () {
+    setGame({ freeCells: [null, null, null, null], foundations: [[], [], [], []], tableau: fcDeal() });
+    setSelected(null);
+    setHistory([]);
+    setMoves(0);
+    setTime(0);
+    setRunning(true);
+    setWon(false);
+    setFlash(null);
+  };
+
+  // Card renderer
+  var renderCard = function (card, opts) {
+    opts = opts || {};
+    var isSel = opts.selected;
+    var suit = FC_SUITS[card.suit];
+    var color = suit.color === "red" ? CLf.red : CLf.black;
+    return (
+      <div onClick={opts.onClick} onDoubleClick={opts.onDoubleClick} style={{
+        width: 84, height: 118, borderRadius: 9, background: "#fff",
+        border: "1.5px solid " + (isSel ? CLf.primary : CLf.border),
+        boxShadow: isSel ? "0 0 0 3px " + CLf.primaryDim + ", 0 3px 8px rgba(24,24,27,0.10)" : "0 1px 3px rgba(24,24,27,0.10)",
+        position: "relative", cursor: "pointer", userSelect: "none",
+        display: "flex", flexDirection: "column", transition: "all 0.08s",
+      }}>
+        <div style={{ padding: "6px 8px 0", fontSize: 19, fontWeight: 800, color: color, lineHeight: 1, fontFamily: "'Inter',sans-serif" }}>
+          {FC_RANKS[card.rank - 1]}
+        </div>
+        <div style={{ padding: "0 8px", fontSize: 17, color: color, lineHeight: 1, marginTop: 2 }}>
+          {suit.symbol}
+        </div>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 38, color: color, marginTop: -6 }}>
+          {suit.symbol}
+        </div>
+      </div>
+    );
+  };
+
+  var renderEmptySlot = function (onClick, label) {
+    return (
+      <div onClick={onClick} style={{
+        width: 84, height: 118, borderRadius: 9,
+        border: "1.5px dashed " + CLf.borderThick, background: CLf.surfaceLight,
+        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+        color: CLf.textMuted, fontSize: 22, fontWeight: 600,
+      }}>{label || ""}</div>
+    );
+  };
+
+  var totalOnFoundations = game.foundations.reduce(function (a, f) { return a + f.length; }, 0);
+
+  return (
+    <div style={{
+      width: "100%", maxWidth: 1100, margin: "0 auto",
+      display: "flex", flexDirection: "column", alignItems: "center", gap: 18,
+    }}>
+      {/* Info bar */}
+      <div style={{
+        display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", alignItems: "center",
+        background: CLf.surface, border: "1px solid " + CLf.border, borderRadius: 12, padding: "10px 14px",
+        boxShadow: "0 1px 2px rgba(24,24,27,0.03)",
+      }}>
+        <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: CLf.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Time</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: CLf.primaryLight, fontVariantNumeric: "tabular-nums" }}>{fmtTime(time)}</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: CLf.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Moves</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: CLf.text, fontVariantNumeric: "tabular-nums" }}>{moves}</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: CLf.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Cards Home</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: CLf.success, fontVariantNumeric: "tabular-nums" }}>{totalOnFoundations + " / 52"}</div>
+          </div>
+        </div>
+        <div style={{ width: 1, height: 28, background: CLf.border }} />
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={newGame} style={{
+            padding: "8px 14px", borderRadius: 8, border: "1.5px solid " + CLf.primary, background: CLf.primary, color: "#fff",
+            cursor: "pointer", fontSize: 13, fontWeight: 700,
+          }}>New Deal</button>
+          <button onClick={autoClear} title="Send every eligible card to its foundation" style={{
+            padding: "8px 14px", borderRadius: 8, border: "1.5px solid " + CLf.success, background: CLf.successDim, color: CLf.success,
+            cursor: "pointer", fontSize: 13, fontWeight: 700,
+          }}>Auto Clear</button>
+          <button onClick={undo} disabled={history.length === 0} style={{
+            padding: "8px 14px", borderRadius: 8, border: "1.5px solid " + CLf.border, background: CLf.surface,
+            color: history.length ? CLf.text : CLf.textMuted,
+            cursor: history.length ? "pointer" : "default", fontSize: 13, fontWeight: 700,
+          }}>Undo</button>
+        </div>
+      </div>
+
+      {won && (
+        <div style={{
+          padding: "12px 20px", borderRadius: 10, background: CLf.successDim, border: "1.5px solid " + CLf.success,
+          color: CLf.success, fontWeight: 800, fontSize: 15,
+        }}>🏆 You win! {moves} moves · {fmtTime(time)}</div>
+      )}
+
+      {/* Top row: 4 free cells + gap + 4 foundations */}
+      <div style={{
+        display: "flex", gap: 12, padding: 16, borderRadius: 16,
+        background: CLf.felt, border: "1px solid " + CLf.border,
+        boxShadow: "0 1px 2px rgba(24,24,27,0.04)",
+        transition: "background 0.18s",
+        backgroundColor: flash === "error" ? CLf.errorDim : CLf.felt,
+      }}>
+        {/* Free cells */}
+        {[0, 1, 2, 3].map(function (i) {
+          var c = game.freeCells[i];
+          var isSel = selected && selected.zone === "free" && selected.col === i;
+          if (c) {
+            return <div key={"fc" + i}>{renderCard(c, {
+              selected: isSel,
+              onClick: function () { clickFreeCell(i); },
+              onDoubleClick: function () { autoToFoundation({ zone: "free", col: i }); },
+            })}</div>;
+          }
+          return <div key={"fc" + i}>{renderEmptySlot(function () { clickFreeCell(i); }, "")}</div>;
+        })}
+        <div style={{ width: 24 }} />
+        {/* Foundations */}
+        {[0, 1, 2, 3].map(function (i) {
+          var f = game.foundations[i];
+          var suit = FC_SUITS[i];
+          if (f.length > 0) {
+            var top = f[f.length - 1];
+            return <div key={"f" + i} onClick={function () { clickFoundation(i); }}>{renderCard(top, { onClick: function () { clickFoundation(i); } })}</div>;
+          }
+          return (
+            <div key={"f" + i} onClick={function () { clickFoundation(i); }} style={{
+              width: 84, height: 118, borderRadius: 9, border: "1.5px dashed " + CLf.borderThick,
+              background: CLf.surface, cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 36, color: suit.color === "red" ? CLf.red : CLf.black, opacity: 0.35,
+            }}>{suit.symbol}</div>
+          );
+        })}
+      </div>
+
+      {/* Tableau: 8 columns */}
+      <div style={{
+        display: "flex", gap: 12, padding: 16, borderRadius: 16,
+        background: CLf.felt, border: "1px solid " + CLf.border, minHeight: 560,
+        boxShadow: "0 1px 2px rgba(24,24,27,0.04)",
+      }}>
+        {game.tableau.map(function (col, colIdx) {
+          if (col.length === 0) {
+            return (
+              <div key={"col" + colIdx} style={{ width: 84 }}>
+                <div onClick={function () { clickTableauEmpty(colIdx); }} style={{
+                  width: 84, height: 118, borderRadius: 9, border: "1.5px dashed " + CLf.borderThick,
+                  background: CLf.surfaceLight, cursor: "pointer",
+                }} />
+              </div>
+            );
+          }
+          return (
+            <div key={"col" + colIdx} style={{ width: 84, display: "flex", flexDirection: "column" }}>
+              {col.map(function (card, cardIdx) {
+                var isSel = selected && selected.zone === "tableau" && selected.col === colIdx && cardIdx >= selected.idx;
+                return (
+                  <div key={"c" + colIdx + "_" + cardIdx} style={{ marginTop: cardIdx === 0 ? 0 : -88 }}>
+                    {renderCard(card, {
+                      selected: isSel,
+                      onClick: function () { clickTableauCard(colIdx, cardIdx); },
+                      onDoubleClick: function () {
+                        if (cardIdx === col.length - 1) autoToFoundation({ zone: "tableau", col: colIdx });
+                      },
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Rules footnote */}
+      <div style={{ fontSize: 11, color: CLf.textMuted, textAlign: "center", maxWidth: 600, lineHeight: 1.5 }}>
+        Click a card to select, click a destination to move. Double-click to auto-send a card to its foundation.
+        Tableau columns build down in alternating colors; foundations build up by suit.
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// KLONDIKE SOLITAIRE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function KlondikeGame() {
+  var CL_K = {
+    bg: "#fafafa", surface: "#ffffff", surfaceLight: "#f4f4f5",
+    border: "#e4e4e7", borderThick: "#a1a1aa", felt: "#f4f4f5",
+    text: "#18181b", textDim: "#52525b", textMuted: "#a1a1aa",
+    primary: "#4f46e5", primaryLight: "#4338ca", primaryDim: "rgba(79,70,229,0.08)",
+    success: "#10b981", successDim: "rgba(16,185,129,0.10)",
+    error: "#ef4444", errorDim: "rgba(239,68,68,0.08)",
+  };
+
+  function dealKlondike() {
+    var deck = pcShuffle(pcMakeDeck());
+    for (var b = 0; b < deck.length; b++) deck[b].back = "red";
+    var tableau = [[], [], [], [], [], [], []];
+    var di = 0;
+    for (var col = 0; col < 7; col++) {
+      for (var row = 0; row <= col; row++) {
+        var card = deck[di++];
+        card.faceUp = (row === col);
+        tableau[col].push(card);
+      }
+    }
+    var stock = deck.slice(di);
+    for (var i = 0; i < stock.length; i++) stock[i].faceUp = false;
+    return { tableau: tableau, stock: stock, waste: [], foundations: [[], [], [], []] };
+  }
+
+  var _drawMode = useState(1); // 1 or 3
+  var drawMode = _drawMode[0], setDrawMode = _drawMode[1];
+
+  var _game = useState(dealKlondike);
+  var game = _game[0], setGame = _game[1];
+
+  var _selected = useState(null); // { zone, col, idx? }
+  var selected = _selected[0], setSelected = _selected[1];
+  var _history = useState([]);
+  var history = _history[0], setHistory = _history[1];
+  var _moves = useState(0);
+  var moves = _moves[0], setMoves = _moves[1];
+  var _time = useState(0);
+  var time = _time[0], setTime = _time[1];
+  var _running = useState(true);
+  var running = _running[0], setRunning = _running[1];
+  var _won = useState(false);
+  var won = _won[0], setWon = _won[1];
+  var _flash = useState(null);
+  var flash = _flash[0], setFlash = _flash[1];
+
+  var timerRef = useRef(null);
+  useEffect(function () {
+    if (running && !won) {
+      timerRef.current = setInterval(function () { setTime(function (t) { return t + 1; }); }, 1000);
+    }
+    return function () { clearInterval(timerRef.current); };
+  }, [running, won]);
+
+  useEffect(function () {
+    var total = game.foundations.reduce(function (a, f) { return a + f.length; }, 0);
+    if (total === 52 && !won) { setWon(true); setRunning(false); }
+  }, [game]);
+
+  function fmtTime(s) {
+    return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+  }
+
+  function snap() {
+    return {
+      tableau: game.tableau.map(function (c) { return c.map(function (x) { return Object.assign({}, x); }); }),
+      stock: game.stock.map(function (x) { return Object.assign({}, x); }),
+      waste: game.waste.map(function (x) { return Object.assign({}, x); }),
+      foundations: game.foundations.map(function (f) { return f.map(function (x) { return Object.assign({}, x); }); }),
+    };
+  }
+
+  function reject() {
+    setFlash("err");
+    setTimeout(function () { setFlash(null); }, 200);
+    setSelected(null);
+  }
+
+  function commit(next) {
+    setHistory(history.concat([snap()]));
+    setGame(next);
+    setMoves(moves + 1);
+    setSelected(null);
+  }
+
+  function newGame() {
+    setGame(dealKlondike());
+    setSelected(null); setHistory([]); setMoves(0); setTime(0); setRunning(true); setWon(false); setFlash(null);
+  }
+
+  function undo() {
+    if (history.length === 0) return;
+    setGame(history[history.length - 1]);
+    setHistory(history.slice(0, -1));
+    setSelected(null); setWon(false); setRunning(true);
+  }
+
+  function clickStock() {
+    var g = snap();
+    if (g.stock.length === 0) {
+      // Recycle waste back to stock
+      if (g.waste.length === 0) { reject(); return; }
+      g.stock = g.waste.reverse().map(function (c) { c.faceUp = false; return c; });
+      g.waste = [];
+      commit(g);
+      return;
+    }
+    var n = Math.min(drawMode, g.stock.length);
+    for (var i = 0; i < n; i++) {
+      var c = g.stock.pop();
+      c.faceUp = true;
+      g.waste.push(c);
+    }
+    commit(g);
+  }
+
+  function getSelCards() {
+    if (!selected) return null;
+    if (selected.zone === "waste") {
+      var w = game.waste; return w.length ? [w[w.length - 1]] : null;
+    }
+    if (selected.zone === "tableau") {
+      return game.tableau[selected.col].slice(selected.idx);
+    }
+    if (selected.zone === "found") {
+      var f = game.foundations[selected.col]; return f.length ? [f[f.length - 1]] : null;
+    }
+    return null;
+  }
+
+  function clearSel(g) {
+    if (!selected) return;
+    if (selected.zone === "waste") g.waste.pop();
+    else if (selected.zone === "tableau") {
+      g.tableau[selected.col] = g.tableau[selected.col].slice(0, selected.idx);
+      // Flip the new top if exists and face-down
+      var col = g.tableau[selected.col];
+      if (col.length > 0 && !col[col.length - 1].faceUp) col[col.length - 1].faceUp = true;
+    }
+    else if (selected.zone === "found") g.foundations[selected.col].pop();
+  }
+
+  function clickWaste() {
+    if (game.waste.length === 0) return;
+    if (!selected) {
+      setSelected({ zone: "waste" });
+      return;
+    }
+    if (selected.zone === "waste") { setSelected(null); return; }
+    reject();
+  }
+
+  function clickFoundation(idx) {
+    if (!selected) {
+      var f = game.foundations[idx];
+      if (f.length > 0) setSelected({ zone: "found", col: idx });
+      return;
+    }
+    var sel = getSelCards();
+    if (!sel || sel.length !== 1) { reject(); return; }
+    if (!pcCanFoundation(sel[0], game.foundations[idx])) { reject(); return; }
+    var g = snap();
+    g.foundations[idx].push(sel[0]);
+    clearSel(g);
+    commit(g);
+  }
+
+  function clickTableau(colIdx, cardIdx) {
+    var col = game.tableau[colIdx];
+    if (!selected) {
+      if (col.length === 0) return;
+      var card = col[cardIdx];
+      if (!card.faceUp) {
+        // Only flip is automatic via clearSel — clicking a face-down does nothing
+        if (cardIdx === col.length - 1) {
+          var g = snap();
+          g.tableau[colIdx][cardIdx].faceUp = true;
+          commit(g);
+        }
+        return;
+      }
+      var seq = col.slice(cardIdx);
+      if (!pcIsValidAltSequence(seq)) { reject(); return; }
+      setSelected({ zone: "tableau", col: colIdx, idx: cardIdx });
+      return;
+    }
+    // Move INTO this column
+    if (selected.zone === "tableau" && selected.col === colIdx) { setSelected(null); return; }
+    var sel = getSelCards();
+    if (!sel || sel.length === 0) { reject(); return; }
+    var dest = game.tableau[colIdx];
+    var destTop = dest.length > 0 ? dest[dest.length - 1] : null;
+    if (!pcCanTableauAlt(sel[0], destTop, false)) { reject(); return; }
+    var g = snap();
+    for (var i = 0; i < sel.length; i++) g.tableau[colIdx].push(sel[i]);
+    clearSel(g);
+    commit(g);
+  }
+
+  function clickEmptyTableau(colIdx) {
+    if (!selected) return;
+    var sel = getSelCards();
+    if (!sel || sel.length === 0) { reject(); return; }
+    if (sel[0].rank !== 13) { reject(); return; }
+    var g = snap();
+    for (var i = 0; i < sel.length; i++) g.tableau[colIdx].push(sel[i]);
+    clearSel(g);
+    commit(g);
+  }
+
+  function autoToFoundation(source) {
+    var card, g = snap();
+    if (source.zone === "tableau") {
+      var col = g.tableau[source.col];
+      if (col.length === 0) return;
+      card = col[col.length - 1];
+      if (!card.faceUp) return;
+    } else if (source.zone === "waste") {
+      if (g.waste.length === 0) return;
+      card = g.waste[g.waste.length - 1];
+    }
+    if (!pcCanFoundation(card, g.foundations[card.suit])) return;
+    g.foundations[card.suit].push(card);
+    if (source.zone === "tableau") {
+      g.tableau[source.col].pop();
+      var rest = g.tableau[source.col];
+      if (rest.length > 0 && !rest[rest.length - 1].faceUp) rest[rest.length - 1].faceUp = true;
+    } else g.waste.pop();
+    setHistory(history.concat([snap()]));
+    setGame(g); setMoves(moves + 1); setSelected(null);
+  }
+
+  function autoClear() {
+    var pre = snap();
+    var g = snap();
+    var movedCount = 0, changed = true;
+    while (changed) {
+      changed = false;
+      // Waste
+      if (g.waste.length > 0) {
+        var wc = g.waste[g.waste.length - 1];
+        if (pcCanFoundation(wc, g.foundations[wc.suit])) {
+          g.foundations[wc.suit].push(wc); g.waste.pop();
+          changed = true; movedCount++;
+        }
+      }
+      // Tableau bottoms
+      for (var col = 0; col < 7; col++) {
+        var t = g.tableau[col];
+        if (t.length === 0) continue;
+        var top = t[t.length - 1];
+        if (!top.faceUp) continue;
+        if (pcCanFoundation(top, g.foundations[top.suit])) {
+          g.foundations[top.suit].push(top);
+          t.pop();
+          if (t.length > 0 && !t[t.length - 1].faceUp) t[t.length - 1].faceUp = true;
+          changed = true; movedCount++;
+        }
+      }
+    }
+    if (movedCount === 0) { reject(); return; }
+    setHistory(history.concat([pre]));
+    setGame(g); setMoves(moves + movedCount); setSelected(null);
+  }
+
+  var totalHome = game.foundations.reduce(function (a, f) { return a + f.length; }, 0);
+  var CW = 72, CH = 100;
+
+  return (
+    <div style={{ width: "100%", maxWidth: 1100, margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+      {/* Info bar */}
+      <div style={{
+        display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center", alignItems: "center",
+        background: CL_K.surface, border: "1px solid " + CL_K.border, borderRadius: 12, padding: "10px 14px",
+      }}>
+        <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: CL_K.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Time</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: CL_K.primaryLight, fontVariantNumeric: "tabular-nums" }}>{fmtTime(time)}</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: CL_K.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Moves</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: CL_K.text, fontVariantNumeric: "tabular-nums" }}>{moves}</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: CL_K.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Cards Home</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: CL_K.success, fontVariantNumeric: "tabular-nums" }}>{totalHome + " / 52"}</div>
+          </div>
+        </div>
+        <div style={{ width: 1, height: 28, background: CL_K.border }} />
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button onClick={newGame} style={{ padding: "8px 14px", borderRadius: 8, border: "1.5px solid " + CL_K.primary, background: CL_K.primary, color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>New Deal</button>
+          <button onClick={autoClear} style={{ padding: "8px 14px", borderRadius: 8, border: "1.5px solid " + CL_K.success, background: CL_K.successDim, color: CL_K.success, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>Auto Clear</button>
+          <button onClick={undo} disabled={history.length === 0} style={{ padding: "8px 14px", borderRadius: 8, border: "1.5px solid " + CL_K.border, background: CL_K.surface, color: history.length ? CL_K.text : CL_K.textMuted, cursor: history.length ? "pointer" : "default", fontSize: 13, fontWeight: 700 }}>Undo</button>
+        </div>
+        <div style={{ width: 1, height: 28, background: CL_K.border }} />
+        <div style={{ display: "flex", gap: 4, background: CL_K.surfaceLight, borderRadius: 8, padding: 3, border: "1px solid " + CL_K.border }}>
+          <button onClick={function () { setDrawMode(1); }} style={{ padding: "5px 11px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700, background: drawMode === 1 ? CL_K.primary : "transparent", color: drawMode === 1 ? "#fff" : CL_K.textDim }}>Draw 1</button>
+          <button onClick={function () { setDrawMode(3); }} style={{ padding: "5px 11px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700, background: drawMode === 3 ? CL_K.primary : "transparent", color: drawMode === 3 ? "#fff" : CL_K.textDim }}>Draw 3</button>
+        </div>
+      </div>
+
+      {won && (
+        <div style={{ padding: "12px 20px", borderRadius: 10, background: CL_K.successDim, border: "1.5px solid " + CL_K.success, color: CL_K.success, fontWeight: 800, fontSize: 15 }}>🏆 You win! {moves} moves · {fmtTime(time)}</div>
+      )}
+
+      {/* Top row: stock, waste, foundations */}
+      <div style={{
+        display: "flex", gap: 12, padding: 16, borderRadius: 16,
+        background: CL_K.felt, border: "1px solid " + CL_K.border,
+        backgroundColor: flash === "err" ? CL_K.errorDim : CL_K.felt, transition: "background 0.18s",
+      }}>
+        {/* Stock */}
+        <div onClick={clickStock}>
+          {game.stock.length > 0
+            ? renderPlayingCard({ rank: 1, suit: 0, faceUp: false, back: "red" }, { width: CW, height: CH, onClick: clickStock })
+            : renderPlayingSlot({ width: CW, height: CH, onClick: clickStock, label: "↻" })}
+        </div>
+        {/* Waste — show up to 3 fanned */}
+        <div style={{ position: "relative", width: drawMode === 3 ? CW + 36 : CW, height: CH }}>
+          {(function () {
+            var w = game.waste;
+            if (w.length === 0) return renderPlayingSlot({ width: CW, height: CH });
+            var visible = drawMode === 3 ? w.slice(-3) : w.slice(-1);
+            return visible.map(function (card, i) {
+              var isTop = i === visible.length - 1;
+              var isSel = isTop && selected && selected.zone === "waste";
+              return (
+                <div key={"w" + i} style={{ position: "absolute", left: i * 18, top: 0 }}>
+                  {renderPlayingCard(card, {
+                    width: CW, height: CH, selected: isSel,
+                    onClick: isTop ? clickWaste : null,
+                    onDoubleClick: isTop ? function () { autoToFoundation({ zone: "waste" }); } : null,
+                  })}
+                </div>
+              );
+            });
+          })()}
+        </div>
+        <div style={{ width: 24 }} />
+        {/* Foundations */}
+        {[0, 1, 2, 3].map(function (i) {
+          var f = game.foundations[i];
+          if (f.length > 0) {
+            var top = f[f.length - 1];
+            return <div key={"kf" + i}>{renderPlayingCard(top, { width: CW, height: CH, onClick: function () { clickFoundation(i); } })}</div>;
+          }
+          return (
+            <div key={"kf" + i} onClick={function () { clickFoundation(i); }} style={{
+              width: CW, height: CH, borderRadius: 8, border: "1.5px dashed " + CL_K.borderThick,
+              background: CL_K.surface, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 30, color: FC_SUITS[i].color === "red" ? PC_COLORS.red : PC_COLORS.black, opacity: 0.35,
+            }}>{FC_SUITS[i].symbol}</div>
+          );
+        })}
+      </div>
+
+      {/* Tableau */}
+      <div style={{ display: "flex", gap: 12, padding: 16, borderRadius: 16, background: CL_K.felt, border: "1px solid " + CL_K.border, minHeight: 480 }}>
+        {game.tableau.map(function (col, colIdx) {
+          if (col.length === 0) {
+            return (
+              <div key={"kc" + colIdx} style={{ width: CW }}>
+                <div onClick={function () { clickEmptyTableau(colIdx); }} style={{
+                  width: CW, height: CH, borderRadius: 8, border: "1.5px dashed " + CL_K.borderThick,
+                  background: CL_K.surfaceLight, cursor: "pointer",
+                }} />
+              </div>
+            );
+          }
+          return (
+            <div key={"kc" + colIdx} style={{ width: CW, display: "flex", flexDirection: "column" }}>
+              {col.map(function (card, cardIdx) {
+                var isSel = selected && selected.zone === "tableau" && selected.col === colIdx && cardIdx >= selected.idx;
+                var overlap = card.faceUp ? -72 : -82;
+                return (
+                  <div key={card.id} style={{ marginTop: cardIdx === 0 ? 0 : overlap }}>
+                    {renderPlayingCard(card, {
+                      width: CW, height: CH, selected: isSel,
+                      onClick: function () { clickTableau(colIdx, cardIdx); },
+                      onDoubleClick: function () { if (cardIdx === col.length - 1) autoToFoundation({ zone: "tableau", col: colIdx }); },
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ fontSize: 11, color: CL_K.textMuted, textAlign: "center", maxWidth: 600, lineHeight: 1.5 }}>
+        Click stock to draw. Tableau builds down in alternating colors. Foundations build up by suit (A→K). Empty columns accept Kings only. Double-click to auto-send to foundation.
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SPIDER SOLITAIRE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function SpiderGame() {
+  var CL_S = {
+    bg: "#fafafa", surface: "#ffffff", surfaceLight: "#f4f4f5",
+    border: "#e4e4e7", borderThick: "#a1a1aa", felt: "#f4f4f5",
+    text: "#18181b", textDim: "#52525b", textMuted: "#a1a1aa",
+    primary: "#4f46e5", primaryLight: "#4338ca", primaryDim: "rgba(79,70,229,0.08)",
+    success: "#10b981", successDim: "rgba(16,185,129,0.10)",
+    error: "#ef4444", errorDim: "rgba(239,68,68,0.08)",
+  };
+
+  var _difficulty = useState("1suit"); // "1suit" | "2suit" | "4suit"
+  var difficulty = _difficulty[0], setDifficulty = _difficulty[1];
+
+  function dealSpider(diff) {
+    var suits;
+    if (diff === "1suit") suits = [0, 0, 0, 0];
+    else if (diff === "2suit") suits = [0, 1, 0, 1];
+    else suits = [0, 1, 2, 3];
+    // Build 2 decks of just the chosen suits (104 cards total)
+    var deck = [];
+    var idCounter = 0;
+    for (var d = 0; d < 2; d++) {
+      for (var si = 0; si < suits.length; si++) {
+        for (var r = 1; r <= 13; r++) {
+          deck.push({ rank: r, suit: suits[si], faceUp: false, back: "pinstripe", id: "s" + (idCounter++) });
+        }
+      }
+    }
+    deck = pcShuffle(deck);
+    var tableau = [[], [], [], [], [], [], [], [], [], []];
+    var di = 0;
+    // First 4 cols get 6, last 6 cols get 5; top of each face up
+    var colSizes = [6, 6, 6, 6, 5, 5, 5, 5, 5, 5];
+    for (var col = 0; col < 10; col++) {
+      for (var i = 0; i < colSizes[col]; i++) tableau[col].push(deck[di++]);
+      tableau[col][tableau[col].length - 1].faceUp = true;
+    }
+    var stock = deck.slice(di); // 50 cards remaining
+    return { tableau: tableau, stock: stock, completedSets: 0 };
+  }
+
+  var _game = useState(function () { return dealSpider("1suit"); });
+  var game = _game[0], setGame = _game[1];
+
+  var _selected = useState(null);
+  var selected = _selected[0], setSelected = _selected[1];
+  var _history = useState([]);
+  var history = _history[0], setHistory = _history[1];
+  var _moves = useState(0);
+  var moves = _moves[0], setMoves = _moves[1];
+  var _time = useState(0);
+  var time = _time[0], setTime = _time[1];
+  var _running = useState(true);
+  var running = _running[0], setRunning = _running[1];
+  var _won = useState(false);
+  var won = _won[0], setWon = _won[1];
+  var _flash = useState(null);
+  var flash = _flash[0], setFlash = _flash[1];
+
+  var timerRef = useRef(null);
+  useEffect(function () {
+    if (running && !won) {
+      timerRef.current = setInterval(function () { setTime(function (t) { return t + 1; }); }, 1000);
+    }
+    return function () { clearInterval(timerRef.current); };
+  }, [running, won]);
+
+  useEffect(function () {
+    if (game.completedSets === 8 && !won) { setWon(true); setRunning(false); }
+  }, [game]);
+
+  function fmtTime(s) { return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); }
+
+  function snap() {
+    return {
+      tableau: game.tableau.map(function (c) { return c.map(function (x) { return Object.assign({}, x); }); }),
+      stock: game.stock.map(function (x) { return Object.assign({}, x); }),
+      completedSets: game.completedSets,
+    };
+  }
+
+  function reject() { setFlash("err"); setTimeout(function () { setFlash(null); }, 200); setSelected(null); }
+  function commit(g) { setHistory(history.concat([snap()])); setGame(g); setMoves(moves + 1); setSelected(null); }
+
+  function newDeal(diff) {
+    setGame(dealSpider(diff || difficulty));
+    setSelected(null); setHistory([]); setMoves(0); setTime(0); setRunning(true); setWon(false); setFlash(null);
+  }
+
+  function changeDifficulty(diff) {
+    setDifficulty(diff);
+    setGame(dealSpider(diff));
+    setSelected(null); setHistory([]); setMoves(0); setTime(0); setRunning(true); setWon(false); setFlash(null);
+  }
+
+  function undo() {
+    if (history.length === 0) return;
+    setGame(history[history.length - 1]);
+    setHistory(history.slice(0, -1));
+    setSelected(null); setWon(false); setRunning(true);
+  }
+
+  // Check & remove a completed K-A in-suit run from a column
+  function tryCompleteSet(g, colIdx) {
+    var col = g.tableau[colIdx];
+    if (col.length < 13) return false;
+    var start = col.length - 13;
+    var run = col.slice(start);
+    if (!run[0].faceUp) return false;
+    var suit = run[0].suit;
+    if (run[0].rank !== 13) return false;
+    for (var i = 0; i < 13; i++) {
+      if (run[i].suit !== suit) return false;
+      if (run[i].rank !== 13 - i) return false;
+      if (!run[i].faceUp) return false;
+    }
+    g.tableau[colIdx] = col.slice(0, start);
+    if (g.tableau[colIdx].length > 0 && !g.tableau[colIdx][g.tableau[colIdx].length - 1].faceUp) {
+      g.tableau[colIdx][g.tableau[colIdx].length - 1].faceUp = true;
+    }
+    g.completedSets++;
+    return true;
+  }
+
+  function clickStock() {
+    // Cannot deal if any column is empty
+    for (var i = 0; i < 10; i++) if (game.tableau[i].length === 0) { reject(); return; }
+    if (game.stock.length < 10) { reject(); return; }
+    var g = snap();
+    for (var c = 0; c < 10; c++) {
+      var card = g.stock.pop();
+      card.faceUp = true;
+      g.tableau[c].push(card);
+    }
+    // After deal, check for completed sets
+    for (var c2 = 0; c2 < 10; c2++) tryCompleteSet(g, c2);
+    commit(g);
+  }
+
+  function clickTableau(colIdx, cardIdx) {
+    var col = game.tableau[colIdx];
+    if (!selected) {
+      if (col.length === 0) return;
+      var card = col[cardIdx];
+      if (!card.faceUp) {
+        if (cardIdx === col.length - 1) {
+          var g = snap();
+          g.tableau[colIdx][cardIdx].faceUp = true;
+          commit(g);
+        }
+        return;
+      }
+      var run = pcSpiderRunFrom(col, cardIdx);
+      if (!run) { reject(); return; }
+      setSelected({ zone: "tableau", col: colIdx, idx: cardIdx });
+      return;
+    }
+    // Move INTO this column
+    if (selected.zone === "tableau" && selected.col === colIdx) { setSelected(null); return; }
+    var srcCol = game.tableau[selected.col];
+    var sel = srcCol.slice(selected.idx);
+    var dest = game.tableau[colIdx];
+    if (dest.length > 0) {
+      var top = dest[dest.length - 1];
+      if (sel[0].rank !== top.rank - 1) { reject(); return; }
+    }
+    var g2 = snap();
+    for (var i = 0; i < sel.length; i++) g2.tableau[colIdx].push(sel[i]);
+    g2.tableau[selected.col] = g2.tableau[selected.col].slice(0, selected.idx);
+    if (g2.tableau[selected.col].length > 0 && !g2.tableau[selected.col][g2.tableau[selected.col].length - 1].faceUp) {
+      g2.tableau[selected.col][g2.tableau[selected.col].length - 1].faceUp = true;
+    }
+    tryCompleteSet(g2, colIdx);
+    commit(g2);
+  }
+
+  function clickEmptyTableau(colIdx) {
+    if (!selected) return;
+    var srcCol = game.tableau[selected.col];
+    var sel = srcCol.slice(selected.idx);
+    if (sel.length === 0) { reject(); return; }
+    var g = snap();
+    for (var i = 0; i < sel.length; i++) g.tableau[colIdx].push(sel[i]);
+    g.tableau[selected.col] = g.tableau[selected.col].slice(0, selected.idx);
+    if (g.tableau[selected.col].length > 0 && !g.tableau[selected.col][g.tableau[selected.col].length - 1].faceUp) {
+      g.tableau[selected.col][g.tableau[selected.col].length - 1].faceUp = true;
+    }
+    tryCompleteSet(g, colIdx);
+    commit(g);
+  }
+
+  var CW = 64, CH = 90;
+
+  return (
+    <div style={{ width: "100%", maxWidth: 1100, margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+      {/* Info bar */}
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center", alignItems: "center", background: CL_S.surface, border: "1px solid " + CL_S.border, borderRadius: 12, padding: "10px 14px" }}>
+        <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: CL_S.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Time</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: CL_S.primaryLight, fontVariantNumeric: "tabular-nums" }}>{fmtTime(time)}</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: CL_S.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Moves</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: CL_S.text, fontVariantNumeric: "tabular-nums" }}>{moves}</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: CL_S.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Sets</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: CL_S.success, fontVariantNumeric: "tabular-nums" }}>{game.completedSets + " / 8"}</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: CL_S.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Stock</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: CL_S.text, fontVariantNumeric: "tabular-nums" }}>{game.stock.length}</div>
+          </div>
+        </div>
+        <div style={{ width: 1, height: 28, background: CL_S.border }} />
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={function () { newDeal(); }} style={{ padding: "8px 14px", borderRadius: 8, border: "1.5px solid " + CL_S.primary, background: CL_S.primary, color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>New Deal</button>
+          <button onClick={undo} disabled={history.length === 0} style={{ padding: "8px 14px", borderRadius: 8, border: "1.5px solid " + CL_S.border, background: CL_S.surface, color: history.length ? CL_S.text : CL_S.textMuted, cursor: history.length ? "pointer" : "default", fontSize: 13, fontWeight: 700 }}>Undo</button>
+        </div>
+        <div style={{ width: 1, height: 28, background: CL_S.border }} />
+        <div style={{ display: "flex", gap: 4, background: CL_S.surfaceLight, borderRadius: 8, padding: 3, border: "1px solid " + CL_S.border }}>
+          {[["1suit", "1 Suit"], ["2suit", "2 Suits"], ["4suit", "4 Suits"]].map(function (d) {
+            return (
+              <button key={d[0]} onClick={function () { changeDifficulty(d[0]); }} style={{ padding: "5px 11px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700, background: difficulty === d[0] ? CL_S.primary : "transparent", color: difficulty === d[0] ? "#fff" : CL_S.textDim }}>{d[1]}</button>
+            );
+          })}
+        </div>
+      </div>
+
+      {won && (
+        <div style={{ padding: "12px 20px", borderRadius: 10, background: CL_S.successDim, border: "1.5px solid " + CL_S.success, color: CL_S.success, fontWeight: 800, fontSize: 15 }}>🏆 You win! {moves} moves · {fmtTime(time)}</div>
+      )}
+
+      {/* Deal stock button row */}
+      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+        <button onClick={clickStock} disabled={game.stock.length < 10} style={{
+          padding: "10px 18px", borderRadius: 10, border: "1.5px solid " + (game.stock.length >= 10 ? CL_S.primary : CL_S.border),
+          background: game.stock.length >= 10 ? CL_S.primary : CL_S.surface,
+          color: game.stock.length >= 10 ? "#fff" : CL_S.textMuted,
+          cursor: game.stock.length >= 10 ? "pointer" : "default", fontSize: 13, fontWeight: 700,
+        }}>Deal Row ({Math.floor(game.stock.length / 10)} left)</button>
+      </div>
+
+      {/* Tableau: 10 columns */}
+      <div style={{
+        display: "flex", gap: 8, padding: 16, borderRadius: 16, background: CL_S.felt, border: "1px solid " + CL_S.border, minHeight: 540,
+        backgroundColor: flash === "err" ? CL_S.errorDim : CL_S.felt, transition: "background 0.18s",
+      }}>
+        {game.tableau.map(function (col, colIdx) {
+          if (col.length === 0) {
+            return (
+              <div key={"sc" + colIdx} style={{ width: CW }}>
+                <div onClick={function () { clickEmptyTableau(colIdx); }} style={{
+                  width: CW, height: CH, borderRadius: 8, border: "1.5px dashed " + CL_S.borderThick,
+                  background: CL_S.surfaceLight, cursor: "pointer",
+                }} />
+              </div>
+            );
+          }
+          return (
+            <div key={"sc" + colIdx} style={{ width: CW, display: "flex", flexDirection: "column" }}>
+              {col.map(function (card, cardIdx) {
+                var isSel = selected && selected.zone === "tableau" && selected.col === colIdx && cardIdx >= selected.idx;
+                var overlap = card.faceUp ? -64 : -76;
+                return (
+                  <div key={card.id} style={{ marginTop: cardIdx === 0 ? 0 : overlap }}>
+                    {renderPlayingCard(card, {
+                      width: CW, height: CH, selected: isSel,
+                      onClick: function () { clickTableau(colIdx, cardIdx); },
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ fontSize: 11, color: CL_S.textMuted, textAlign: "center", maxWidth: 660, lineHeight: 1.5 }}>
+        Build descending sequences in any column. Only same-suit runs can move as a group. Complete a K→A run in suit to clear it. Click "Deal Row" when you're stuck (every column must have at least one card).
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// YUKON SOLITAIRE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function YukonGame() {
+  var CL_Y = {
+    bg: "#fafafa", surface: "#ffffff", surfaceLight: "#f4f4f5",
+    border: "#e4e4e7", borderThick: "#a1a1aa", felt: "#f4f4f5",
+    text: "#18181b", textDim: "#52525b", textMuted: "#a1a1aa",
+    primary: "#4f46e5", primaryLight: "#4338ca", primaryDim: "rgba(79,70,229,0.08)",
+    success: "#10b981", successDim: "rgba(16,185,129,0.10)",
+    error: "#ef4444", errorDim: "rgba(239,68,68,0.08)",
+  };
+
+  function dealYukon() {
+    var deck = pcShuffle(pcMakeDeck());
+    for (var b = 0; b < deck.length; b++) deck[b].back = "felt";
+    var tableau = [[], [], [], [], [], [], []];
+    // Col 0: 1 card face up
+    // Col i (1..6): (i + 5) cards total, with i face-down + 5 face-up
+    var di = 0;
+    var c0 = deck[di++]; c0.faceUp = true; tableau[0].push(c0);
+    for (var i = 1; i <= 6; i++) {
+      var total = i + 5;
+      var faceDown = i;
+      for (var j = 0; j < total; j++) {
+        var card = deck[di++];
+        card.faceUp = j >= faceDown;
+        tableau[i].push(card);
+      }
+    }
+    return { tableau: tableau, foundations: [[], [], [], []] };
+  }
+
+  var _game = useState(dealYukon);
+  var game = _game[0], setGame = _game[1];
+  var _selected = useState(null);
+  var selected = _selected[0], setSelected = _selected[1];
+  var _history = useState([]);
+  var history = _history[0], setHistory = _history[1];
+  var _moves = useState(0);
+  var moves = _moves[0], setMoves = _moves[1];
+  var _time = useState(0);
+  var time = _time[0], setTime = _time[1];
+  var _running = useState(true);
+  var running = _running[0], setRunning = _running[1];
+  var _won = useState(false);
+  var won = _won[0], setWon = _won[1];
+  var _flash = useState(null);
+  var flash = _flash[0], setFlash = _flash[1];
+
+  var timerRef = useRef(null);
+  useEffect(function () {
+    if (running && !won) {
+      timerRef.current = setInterval(function () { setTime(function (t) { return t + 1; }); }, 1000);
+    }
+    return function () { clearInterval(timerRef.current); };
+  }, [running, won]);
+
+  useEffect(function () {
+    var total = game.foundations.reduce(function (a, f) { return a + f.length; }, 0);
+    if (total === 52 && !won) { setWon(true); setRunning(false); }
+  }, [game]);
+
+  function fmtTime(s) { return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); }
+
+  function snap() {
+    return {
+      tableau: game.tableau.map(function (c) { return c.map(function (x) { return Object.assign({}, x); }); }),
+      foundations: game.foundations.map(function (f) { return f.map(function (x) { return Object.assign({}, x); }); }),
+    };
+  }
+
+  function reject() { setFlash("err"); setTimeout(function () { setFlash(null); }, 200); setSelected(null); }
+  function commit(g) { setHistory(history.concat([snap()])); setGame(g); setMoves(moves + 1); setSelected(null); }
+
+  function newDeal() {
+    setGame(dealYukon()); setSelected(null); setHistory([]); setMoves(0); setTime(0); setRunning(true); setWon(false); setFlash(null);
+  }
+  function undo() {
+    if (history.length === 0) return;
+    setGame(history[history.length - 1]); setHistory(history.slice(0, -1));
+    setSelected(null); setWon(false); setRunning(true);
+  }
+
+  // Yukon: any face-up card may be moved with everything on top of it.
+  // Destination must be a face-up card of opposite color, one rank higher.
+  function clickTableau(colIdx, cardIdx) {
+    var col = game.tableau[colIdx];
+    if (!selected) {
+      if (col.length === 0) return;
+      var card = col[cardIdx];
+      if (!card.faceUp) {
+        if (cardIdx === col.length - 1) {
+          var g = snap();
+          g.tableau[colIdx][cardIdx].faceUp = true;
+          commit(g);
+        }
+        return;
+      }
+      setSelected({ zone: "tableau", col: colIdx, idx: cardIdx });
+      return;
+    }
+    if (selected.zone === "tableau" && selected.col === colIdx) { setSelected(null); return; }
+    var srcCol = game.tableau[selected.col];
+    var sel = srcCol.slice(selected.idx);
+    var dest = game.tableau[colIdx];
+    if (dest.length === 0) {
+      if (sel[0].rank !== 13) { reject(); return; }
+    } else {
+      var top = dest[dest.length - 1];
+      if (!top.faceUp) { reject(); return; }
+      if (pcCardColor(sel[0]) === pcCardColor(top) || sel[0].rank !== top.rank - 1) { reject(); return; }
+    }
+    var g2 = snap();
+    for (var i = 0; i < sel.length; i++) g2.tableau[colIdx].push(sel[i]);
+    g2.tableau[selected.col] = g2.tableau[selected.col].slice(0, selected.idx);
+    if (g2.tableau[selected.col].length > 0 && !g2.tableau[selected.col][g2.tableau[selected.col].length - 1].faceUp) {
+      g2.tableau[selected.col][g2.tableau[selected.col].length - 1].faceUp = true;
+    }
+    commit(g2);
+  }
+
+  function clickEmptyTableau(colIdx) {
+    if (!selected) return;
+    var srcCol = game.tableau[selected.col];
+    var sel = srcCol.slice(selected.idx);
+    if (!sel.length || sel[0].rank !== 13) { reject(); return; }
+    var g = snap();
+    for (var i = 0; i < sel.length; i++) g.tableau[colIdx].push(sel[i]);
+    g.tableau[selected.col] = g.tableau[selected.col].slice(0, selected.idx);
+    if (g.tableau[selected.col].length > 0 && !g.tableau[selected.col][g.tableau[selected.col].length - 1].faceUp) {
+      g.tableau[selected.col][g.tableau[selected.col].length - 1].faceUp = true;
+    }
+    commit(g);
+  }
+
+  function clickFoundation(idx) {
+    if (!selected) return;
+    var srcCol = game.tableau[selected.col];
+    var sel = srcCol.slice(selected.idx);
+    if (sel.length !== 1) { reject(); return; }
+    if (!pcCanFoundation(sel[0], game.foundations[idx])) { reject(); return; }
+    var g = snap();
+    g.foundations[idx].push(sel[0]);
+    g.tableau[selected.col] = g.tableau[selected.col].slice(0, selected.idx);
+    if (g.tableau[selected.col].length > 0 && !g.tableau[selected.col][g.tableau[selected.col].length - 1].faceUp) {
+      g.tableau[selected.col][g.tableau[selected.col].length - 1].faceUp = true;
+    }
+    commit(g);
+  }
+
+  function autoToFoundation(colIdx) {
+    var col = game.tableau[colIdx];
+    if (col.length === 0) return;
+    var card = col[col.length - 1];
+    if (!card.faceUp) return;
+    if (!pcCanFoundation(card, game.foundations[card.suit])) return;
+    var g = snap();
+    g.foundations[card.suit].push(card);
+    g.tableau[colIdx].pop();
+    if (g.tableau[colIdx].length > 0 && !g.tableau[colIdx][g.tableau[colIdx].length - 1].faceUp) {
+      g.tableau[colIdx][g.tableau[colIdx].length - 1].faceUp = true;
+    }
+    setHistory(history.concat([snap()])); setGame(g); setMoves(moves + 1); setSelected(null);
+  }
+
+  function autoClear() {
+    var pre = snap();
+    var g = snap();
+    var movedCount = 0, changed = true;
+    while (changed) {
+      changed = false;
+      for (var col = 0; col < 7; col++) {
+        var t = g.tableau[col];
+        if (t.length === 0) continue;
+        var top = t[t.length - 1];
+        if (!top.faceUp) continue;
+        if (pcCanFoundation(top, g.foundations[top.suit])) {
+          g.foundations[top.suit].push(top);
+          t.pop();
+          if (t.length > 0 && !t[t.length - 1].faceUp) t[t.length - 1].faceUp = true;
+          changed = true; movedCount++;
+        }
+      }
+    }
+    if (movedCount === 0) { reject(); return; }
+    setHistory(history.concat([pre])); setGame(g); setMoves(moves + movedCount); setSelected(null);
+  }
+
+  var totalHome = game.foundations.reduce(function (a, f) { return a + f.length; }, 0);
+  var CW = 70, CH = 98;
+
+  return (
+    <div style={{ width: "100%", maxWidth: 1100, margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center", alignItems: "center", background: CL_Y.surface, border: "1px solid " + CL_Y.border, borderRadius: 12, padding: "10px 14px" }}>
+        <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: CL_Y.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Time</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: CL_Y.primaryLight, fontVariantNumeric: "tabular-nums" }}>{fmtTime(time)}</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: CL_Y.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Moves</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: CL_Y.text, fontVariantNumeric: "tabular-nums" }}>{moves}</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: CL_Y.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Cards Home</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: CL_Y.success, fontVariantNumeric: "tabular-nums" }}>{totalHome + " / 52"}</div>
+          </div>
+        </div>
+        <div style={{ width: 1, height: 28, background: CL_Y.border }} />
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={newDeal} style={{ padding: "8px 14px", borderRadius: 8, border: "1.5px solid " + CL_Y.primary, background: CL_Y.primary, color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>New Deal</button>
+          <button onClick={autoClear} style={{ padding: "8px 14px", borderRadius: 8, border: "1.5px solid " + CL_Y.success, background: CL_Y.successDim, color: CL_Y.success, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>Auto Clear</button>
+          <button onClick={undo} disabled={history.length === 0} style={{ padding: "8px 14px", borderRadius: 8, border: "1.5px solid " + CL_Y.border, background: CL_Y.surface, color: history.length ? CL_Y.text : CL_Y.textMuted, cursor: history.length ? "pointer" : "default", fontSize: 13, fontWeight: 700 }}>Undo</button>
+        </div>
+      </div>
+
+      {won && (
+        <div style={{ padding: "12px 20px", borderRadius: 10, background: CL_Y.successDim, border: "1.5px solid " + CL_Y.success, color: CL_Y.success, fontWeight: 800, fontSize: 15 }}>🏆 You win! {moves} moves · {fmtTime(time)}</div>
+      )}
+
+      {/* Foundations */}
+      <div style={{ display: "flex", gap: 12, padding: 14, borderRadius: 14, background: CL_Y.felt, border: "1px solid " + CL_Y.border, backgroundColor: flash === "err" ? CL_Y.errorDim : CL_Y.felt, transition: "background 0.18s" }}>
+        {[0, 1, 2, 3].map(function (i) {
+          var f = game.foundations[i];
+          if (f.length > 0) {
+            var top = f[f.length - 1];
+            return <div key={"yf" + i}>{renderPlayingCard(top, { width: CW, height: CH, onClick: function () { clickFoundation(i); } })}</div>;
+          }
+          return (
+            <div key={"yf" + i} onClick={function () { clickFoundation(i); }} style={{
+              width: CW, height: CH, borderRadius: 8, border: "1.5px dashed " + CL_Y.borderThick,
+              background: CL_Y.surface, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 30, color: FC_SUITS[i].color === "red" ? PC_COLORS.red : PC_COLORS.black, opacity: 0.35,
+            }}>{FC_SUITS[i].symbol}</div>
+          );
+        })}
+      </div>
+
+      {/* Tableau */}
+      <div style={{ display: "flex", gap: 12, padding: 16, borderRadius: 16, background: CL_Y.felt, border: "1px solid " + CL_Y.border, minHeight: 560 }}>
+        {game.tableau.map(function (col, colIdx) {
+          if (col.length === 0) {
+            return (
+              <div key={"yc" + colIdx} style={{ width: CW }}>
+                <div onClick={function () { clickEmptyTableau(colIdx); }} style={{
+                  width: CW, height: CH, borderRadius: 8, border: "1.5px dashed " + CL_Y.borderThick,
+                  background: CL_Y.surfaceLight, cursor: "pointer",
+                }} />
+              </div>
+            );
+          }
+          return (
+            <div key={"yc" + colIdx} style={{ width: CW, display: "flex", flexDirection: "column" }}>
+              {col.map(function (card, cardIdx) {
+                var isSel = selected && selected.zone === "tableau" && selected.col === colIdx && cardIdx >= selected.idx;
+                var overlap = card.faceUp ? -70 : -82;
+                return (
+                  <div key={card.id} style={{ marginTop: cardIdx === 0 ? 0 : overlap }}>
+                    {renderPlayingCard(card, {
+                      width: CW, height: CH, selected: isSel,
+                      onClick: function () { clickTableau(colIdx, cardIdx); },
+                      onDoubleClick: function () { if (cardIdx === col.length - 1) autoToFoundation(colIdx); },
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ fontSize: 11, color: CL_Y.textMuted, textAlign: "center", maxWidth: 660, lineHeight: 1.5 }}>
+        All 52 cards are dealt to the tableau — no stock pile. Move any face-up card (and everything on top of it) onto a card one rank higher of the opposite color. Empty columns accept Kings only. Foundations build up by suit.
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TRIPEAKS SOLITAIRE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Cover map: card index → [child indices it covers]. A card is "uncovered" when both children are removed.
+var TP_COVERS = [
+  [3, 4],   // 0 (peak)
+  [5, 6],   // 1 (peak)
+  [7, 8],   // 2 (peak)
+  [9, 10],  // 3 (row 2)
+  [10, 11], // 4
+  [12, 13], // 5
+  [13, 14], // 6
+  [15, 16], // 7
+  [16, 17], // 8
+  [18, 19], // 9 (row 3)
+  [19, 20], // 10
+  [20, 21], // 11
+  [21, 22], // 12
+  [22, 23], // 13
+  [23, 24], // 14
+  [24, 25], // 15
+  [25, 26], // 16
+  [26, 27], // 17
+  [], [], [], [], [], [], [], [], [], [], // 18-27 (row 4)
+];
+
+// Layout positions (x, y) for each tableau index. Card 60×84.
+var TP_POSITIONS = (function () {
+  var step = 70, cw = 60, ch = 84, rowGap = 38;
+  var pos = new Array(28);
+  // Row 4: 10 cards
+  for (var i = 0; i < 10; i++) pos[18 + i] = { x: i * step, y: rowGap * 3 };
+  // Row 3: 9 cards offset by step/2
+  for (var i = 0; i < 9; i++) pos[9 + i] = { x: step / 2 + i * step, y: rowGap * 2 };
+  // Row 2: 6 cards (3 pairs centered over each peak's row-3 group)
+  // Peak 0 row-3 centers: x=step/2 + 0,1,2*step → midpoint = step + step/2 = step*1.5
+  // Pair x: midpoint ± step/2
+  var peakCenters = [step * 1.5, step * 4.5, step * 7.5];
+  pos[3] = { x: peakCenters[0] - step / 2, y: rowGap };
+  pos[4] = { x: peakCenters[0] + step / 2, y: rowGap };
+  pos[5] = { x: peakCenters[1] - step / 2, y: rowGap };
+  pos[6] = { x: peakCenters[1] + step / 2, y: rowGap };
+  pos[7] = { x: peakCenters[2] - step / 2, y: rowGap };
+  pos[8] = { x: peakCenters[2] + step / 2, y: rowGap };
+  // Row 1: 3 peak cards centered above each pair
+  pos[0] = { x: peakCenters[0], y: 0 };
+  pos[1] = { x: peakCenters[1], y: 0 };
+  pos[2] = { x: peakCenters[2], y: 0 };
+  return pos;
+})();
+
+function TriPeaksGame() {
+  var CL_T = {
+    bg: "#fafafa", surface: "#ffffff", surfaceLight: "#f4f4f5",
+    border: "#e4e4e7", borderThick: "#a1a1aa", felt: "#f4f4f5",
+    text: "#18181b", textDim: "#52525b", textMuted: "#a1a1aa",
+    primary: "#4f46e5", primaryLight: "#4338ca",
+    success: "#10b981", successDim: "rgba(16,185,129,0.10)",
+    error: "#ef4444", errorDim: "rgba(239,68,68,0.08)",
+    gold: "#f59e0b", goldDim: "rgba(245,158,11,0.10)",
+  };
+
+  function dealTriPeaks() {
+    var deck = pcShuffle(pcMakeDeck());
+    for (var b = 0; b < deck.length; b++) deck[b].back = "subtle";
+    var tableau = new Array(28);
+    for (var i = 0; i < 28; i++) {
+      tableau[i] = Object.assign({}, deck[i], { removed: false, faceUp: i >= 18 });
+    }
+    var stock = deck.slice(28);
+    for (var j = 0; j < stock.length; j++) stock[j].faceUp = false;
+    // Pop one to waste to start
+    var first = stock.pop();
+    first.faceUp = true;
+    return { tableau: tableau, stock: stock, waste: [first], score: 0, streak: 0 };
+  }
+
+  var _game = useState(dealTriPeaks);
+  var game = _game[0], setGame = _game[1];
+  var _history = useState([]);
+  var history = _history[0], setHistory = _history[1];
+  var _moves = useState(0);
+  var moves = _moves[0], setMoves = _moves[1];
+  var _time = useState(0);
+  var time = _time[0], setTime = _time[1];
+  var _running = useState(true);
+  var running = _running[0], setRunning = _running[1];
+  var _won = useState(false);
+  var won = _won[0], setWon = _won[1];
+  var _flash = useState(null);
+  var flash = _flash[0], setFlash = _flash[1];
+
+  var timerRef = useRef(null);
+  useEffect(function () {
+    if (running && !won) {
+      timerRef.current = setInterval(function () { setTime(function (t) { return t + 1; }); }, 1000);
+    }
+    return function () { clearInterval(timerRef.current); };
+  }, [running, won]);
+
+  useEffect(function () {
+    var remaining = game.tableau.filter(function (c) { return !c.removed; }).length;
+    if (remaining === 0 && !won) { setWon(true); setRunning(false); }
+  }, [game]);
+
+  function fmtTime(s) { return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); }
+
+  function snap() {
+    return {
+      tableau: game.tableau.map(function (x) { return Object.assign({}, x); }),
+      stock: game.stock.map(function (x) { return Object.assign({}, x); }),
+      waste: game.waste.map(function (x) { return Object.assign({}, x); }),
+      score: game.score, streak: game.streak,
+    };
+  }
+
+  function reject() { setFlash("err"); setTimeout(function () { setFlash(null); }, 200); }
+  function commit(g, increment) {
+    setHistory(history.concat([snap()]));
+    setGame(g);
+    if (increment !== false) setMoves(moves + 1);
+  }
+
+  function newDeal() {
+    setGame(dealTriPeaks()); setHistory([]); setMoves(0); setTime(0); setRunning(true); setWon(false); setFlash(null);
+  }
+  function undo() {
+    if (history.length === 0) return;
+    setGame(history[history.length - 1]); setHistory(history.slice(0, -1));
+    setWon(false); setRunning(true);
+  }
+
+  function isUncovered(tableau, idx) {
+    if (tableau[idx].removed) return false;
+    var covers = TP_COVERS[idx];
+    for (var i = 0; i < covers.length; i++) {
+      if (!tableau[covers[i]].removed) return false;
+    }
+    return true;
+  }
+
+  function isPlayable(card, wasteTop) {
+    if (!wasteTop) return false;
+    var diff = Math.abs(card.rank - wasteTop.rank);
+    return diff === 1 || diff === 12; // 12 covers K↔A wrap
+  }
+
+  function clickTableau(idx) {
+    var g = snap();
+    if (!isUncovered(g.tableau, idx)) { reject(); return; }
+    var card = g.tableau[idx];
+    var top = g.waste.length ? g.waste[g.waste.length - 1] : null;
+    if (!isPlayable(card, top)) { reject(); return; }
+    g.tableau[idx].removed = true;
+    g.waste.push(Object.assign({}, card, { removed: false }));
+    g.streak = (g.streak || 0) + 1;
+    g.score = (g.score || 0) + g.streak * 100;
+    // Flip newly uncovered cards face-up
+    for (var k = 0; k < 18; k++) {
+      if (!g.tableau[k].removed && isUncovered(g.tableau, k)) g.tableau[k].faceUp = true;
+    }
+    commit(g);
+  }
+
+  function clickStock() {
+    if (game.stock.length === 0) { reject(); return; }
+    var g = snap();
+    var c = g.stock.pop();
+    c.faceUp = true;
+    g.waste.push(c);
+    g.streak = 0;
+    commit(g);
+  }
+
+  var remaining = game.tableau.filter(function (c) { return !c.removed; }).length;
+  var pyramidWidth = 70 * 9 + 60; // step * (10-1) + cw
+  var pyramidHeight = 38 * 3 + 84;
+
+  return (
+    <div style={{ width: "100%", maxWidth: 1100, margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center", alignItems: "center", background: CL_T.surface, border: "1px solid " + CL_T.border, borderRadius: 12, padding: "10px 14px" }}>
+        <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: CL_T.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Time</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: CL_T.primaryLight, fontVariantNumeric: "tabular-nums" }}>{fmtTime(time)}</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: CL_T.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Score</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: CL_T.gold, fontVariantNumeric: "tabular-nums" }}>{game.score || 0}</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: CL_T.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Streak</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: CL_T.text, fontVariantNumeric: "tabular-nums" }}>{game.streak || 0}</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: CL_T.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Cards Left</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: CL_T.success, fontVariantNumeric: "tabular-nums" }}>{remaining}</div>
+          </div>
+        </div>
+        <div style={{ width: 1, height: 28, background: CL_T.border }} />
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={newDeal} style={{ padding: "8px 14px", borderRadius: 8, border: "1.5px solid " + CL_T.primary, background: CL_T.primary, color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>New Deal</button>
+          <button onClick={undo} disabled={history.length === 0} style={{ padding: "8px 14px", borderRadius: 8, border: "1.5px solid " + CL_T.border, background: CL_T.surface, color: history.length ? CL_T.text : CL_T.textMuted, cursor: history.length ? "pointer" : "default", fontSize: 13, fontWeight: 700 }}>Undo</button>
+        </div>
+      </div>
+
+      {won && (
+        <div style={{ padding: "12px 20px", borderRadius: 10, background: CL_T.successDim, border: "1.5px solid " + CL_T.success, color: CL_T.success, fontWeight: 800, fontSize: 15 }}>🏆 You cleared the peaks! Score {game.score || 0} · {fmtTime(time)}</div>
+      )}
+
+      {/* Pyramid */}
+      <div style={{
+        position: "relative", width: pyramidWidth, height: pyramidHeight,
+        padding: 16, borderRadius: 16, background: CL_T.felt, border: "1px solid " + CL_T.border,
+        backgroundColor: flash === "err" ? CL_T.errorDim : CL_T.felt, transition: "background 0.18s",
+      }}>
+        <div style={{ position: "relative", width: pyramidWidth, height: pyramidHeight }}>
+          {game.tableau.map(function (card, idx) {
+            if (card.removed) return null;
+            var p = TP_POSITIONS[idx];
+            var uncovered = isUncovered(game.tableau, idx);
+            var top = game.waste.length ? game.waste[game.waste.length - 1] : null;
+            var playable = uncovered && isPlayable(card, top);
+            var displayCard = card.faceUp ? card : Object.assign({}, card, { faceUp: false });
+            return (
+              <div key={"tp" + idx} style={{ position: "absolute", left: p.x, top: p.y, zIndex: idx }}>
+                {renderPlayingCard(displayCard, {
+                  width: 60, height: 84,
+                  onClick: uncovered ? function () { clickTableau(idx); } : null,
+                  selected: playable,
+                  dimmed: card.faceUp && !playable,
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Stock and waste */}
+      <div style={{ display: "flex", gap: 16, alignItems: "center", padding: 14, borderRadius: 14, background: CL_T.felt, border: "1px solid " + CL_T.border }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 10, color: CL_T.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Stock ({game.stock.length})</div>
+          {game.stock.length > 0
+            ? <div onClick={clickStock}>{renderPlayingCard({ rank: 1, suit: 0, faceUp: false, back: "subtle" }, { width: 70, height: 98, onClick: clickStock })}</div>
+            : renderPlayingSlot({ width: 70, height: 98 })}
+        </div>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 10, color: CL_T.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Waste</div>
+          {game.waste.length > 0
+            ? renderPlayingCard(game.waste[game.waste.length - 1], { width: 70, height: 98 })
+            : renderPlayingSlot({ width: 70, height: 98 })}
+        </div>
+      </div>
+
+      <div style={{ fontSize: 11, color: CL_T.textMuted, textAlign: "center", maxWidth: 660, lineHeight: 1.5 }}>
+        Click any uncovered tableau card whose rank is one higher or lower than the waste card (Aces wrap to Kings). Build streaks for bigger scores. Click the stock to draw a new waste card when stuck.
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function SudokuTrainer() {
-  // Top-level game switcher: "sudoku" or "quartiles"
+  // Top-level game switcher: "sudoku" | "quartiles" | "freecell"
   var _appGame = useState("sudoku");
   var appGame = _appGame[0], setAppGame = _appGame[1];
   var initData = useMemo(function () { return generatePuzzle("medium"); }, []);
@@ -1888,23 +3760,43 @@ function SudokuTrainer() {
       {/* Header */}
       <div style={{ textAlign: "center", marginBottom: 14 }}>
         <h1 style={{ fontSize: 32, fontWeight: 800, margin: 0, letterSpacing: "2px", color: CL.primaryLight }}>
-          {appGame === "quartiles" ? "QUARTILES" : "SUDOKU"}
+          {appGame === "quartiles" ? "QUARTILES"
+            : appGame === "freecell" ? "FREECELL"
+            : appGame === "klondike" ? "KLONDIKE"
+            : appGame === "spider" ? "SPIDER"
+            : appGame === "yukon" ? "YUKON"
+            : appGame === "tripeaks" ? "TRIPEAKS"
+            : "SUDOKU"}
         </h1>
       </div>
 
-      {/* Top-level Game Switcher (Sudoku / Quartiles) */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 18, background: CL.surface, borderRadius: 12, padding: 4, border: "1px solid " + CL.border, boxShadow: "0 1px 2px rgba(24,24,27,0.03)" }}>
-        <button onClick={function () { setAppGame("sudoku"); }} style={{
-          padding: "9px 22px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, transition: "all 0.15s",
-          background: appGame === "sudoku" ? CL.primary : "transparent", color: appGame === "sudoku" ? "#fff" : CL.textDim,
-        }}>Sudoku</button>
-        <button onClick={function () { setAppGame("quartiles"); setRunning(false); }} style={{
-          padding: "9px 22px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, transition: "all 0.15s",
-          background: appGame === "quartiles" ? CL.primary : "transparent", color: appGame === "quartiles" ? "#fff" : CL.textDim,
-        }}>Quartiles</button>
+      {/* Top-level Game Switcher */}
+      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 4, marginBottom: 18, background: CL.surface, borderRadius: 12, padding: 4, border: "1px solid " + CL.border, boxShadow: "0 1px 2px rgba(24,24,27,0.03)", maxWidth: 760 }}>
+        {[
+          ["sudoku", "Sudoku"],
+          ["quartiles", "Quartiles"],
+          ["freecell", "FreeCell"],
+          ["klondike", "Klondike"],
+          ["spider", "Spider"],
+          ["yukon", "Yukon"],
+          ["tripeaks", "TriPeaks"],
+        ].map(function (g) {
+          var key = g[0], label = g[1];
+          return (
+            <button key={key} onClick={function () { setAppGame(key); if (key !== "sudoku") setRunning(false); }} style={{
+              padding: "9px 18px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, transition: "all 0.15s",
+              background: appGame === key ? CL.primary : "transparent", color: appGame === key ? "#fff" : CL.textDim,
+            }}>{label}</button>
+          );
+        })}
       </div>
 
       {appGame === "quartiles" && <QuartilesGame />}
+      {appGame === "freecell" && <FreeCellGame />}
+      {appGame === "klondike" && <KlondikeGame />}
+      {appGame === "spider" && <SpiderGame />}
+      {appGame === "yukon" && <YukonGame />}
+      {appGame === "tripeaks" && <TriPeaksGame />}
 
       {appGame === "sudoku" && (<React.Fragment>
       {/* Mode Switcher */}

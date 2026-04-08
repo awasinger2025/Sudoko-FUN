@@ -8,9 +8,28 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  html, body { margin: 0; padding: 0; background: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #fafafa;
+    color: #18181b;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv11", "ss01", "ss03";
+  }
   #root { min-height: 100vh; }
+  button { font-family: inherit; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.05s ease; }
+  button:hover:not(:disabled) { filter: brightness(0.98); }
+  button:active:not(:disabled) { transform: translateY(0.5px); }
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb { background: #e4e4e7; border-radius: 8px; border: 2px solid #fafafa; }
+  *::-webkit-scrollbar-thumb:hover { background: #d4d4d8; }
 </style>
 </head>
 <body>
@@ -1025,16 +1044,16 @@ function generatePracticeBoard(techniqueName) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 var CL = {
-  bg: "#0f172a", surface: "#1e293b", surfaceLight: "#334155",
-  border: "#475569", borderThick: "#94a3b8",
-  text: "#f1f5f9", textDim: "#94a3b8", textMuted: "#64748b",
-  primary: "#6366f1", primaryLight: "#818cf8", primaryDim: "rgba(99,102,241,0.15)",
-  success: "#22c55e", successDim: "rgba(34,197,94,0.15)",
-  error: "#ef4444", errorDim: "rgba(239,68,68,0.12)",
-  warning: "#f59e0b", warningDim: "rgba(245,158,11,0.15)",
-  hint: "#a78bfa", hintDim: "rgba(167,139,250,0.18)",
-  pencil: "#7dd3fc", given: "#e2e8f0",
-  selected: "rgba(99,102,241,0.25)", sameNum: "rgba(99,102,241,0.12)", related: "rgba(99,102,241,0.06)",
+  bg: "#fafafa", surface: "#ffffff", surfaceLight: "#f4f4f5",
+  border: "#e4e4e7", borderThick: "#a1a1aa",
+  text: "#18181b", textDim: "#52525b", textMuted: "#a1a1aa",
+  primary: "#4f46e5", primaryLight: "#4338ca", primaryDim: "rgba(79,70,229,0.08)",
+  success: "#10b981", successDim: "rgba(16,185,129,0.10)",
+  error: "#ef4444", errorDim: "rgba(239,68,68,0.08)",
+  warning: "#f59e0b", warningDim: "rgba(245,158,11,0.10)",
+  hint: "#8b5cf6", hintDim: "rgba(139,92,246,0.10)",
+  pencil: "#0ea5e9", given: "#18181b",
+  selected: "rgba(79,70,229,0.14)", sameNum: "rgba(79,70,229,0.07)", related: "rgba(79,70,229,0.035)",
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1375,31 +1394,31 @@ function SudokuTrainer() {
     var m = practiceMastery[tech];
     if (!m || m.attempts === 0) return { level: "New", color: CL.textMuted, pct: 0 };
     var ratio = m.solved / m.attempts;
-    if (m.solved >= 10 && ratio >= 0.9) return { level: "Master", color: "#a78bfa", pct: 100 };
+    if (m.solved >= 10 && ratio >= 0.9) return { level: "Master", color: CL.hint, pct: 100 };
     if (m.solved >= 5 && ratio >= 0.7) return { level: "Proficient", color: CL.success, pct: 75 };
     if (m.solved >= 2 && ratio >= 0.5) return { level: "Learning", color: CL.warning, pct: 50 };
     return { level: "Novice", color: CL.error, pct: 25 };
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: CL.bg, color: CL.text, fontFamily: "'Inter',-apple-system,sans-serif", display: "flex", flexDirection: "column", alignItems: "center", padding: 16, boxSizing: "border-box" }}>
+    <div style={{ minHeight: "100vh", background: CL.bg, color: CL.text, fontFamily: "'Inter',-apple-system,sans-serif", display: "flex", flexDirection: "column", alignItems: "center", padding: "28px 16px 40px", boxSizing: "border-box" }}>
       {/* Header */}
-      <div style={{ textAlign: "center", marginBottom: 10 }}>
-        <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: "-0.5px" }}>
+      <div style={{ textAlign: "center", marginBottom: 18 }}>
+        <h1 style={{ fontSize: 32, fontWeight: 800, margin: 0, letterSpacing: "-0.75px" }}>
           <span style={{ color: CL.primaryLight }}>Sudoku</span> Trainer
         </h1>
-        <p style={{ color: CL.textDim, fontSize: 13, margin: "4px 0 0" }}>17 technique detectors with Practice Zone</p>
+        <p style={{ color: CL.textDim, fontSize: 13, margin: "6px 0 0", fontWeight: 500 }}>17 technique detectors · Practice Zone included</p>
       </div>
 
       {/* Mode Switcher */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 14, background: CL.surface, borderRadius: 10, padding: 3, border: "1px solid " + CL.border }}>
+      <div style={{ display: "flex", gap: 4, marginBottom: 16, background: CL.surface, borderRadius: 12, padding: 4, border: "1px solid " + CL.border, boxShadow: "0 1px 2px rgba(24,24,27,0.03)" }}>
         <button onClick={function () { setMode("freeplay"); setPracticePhase("select"); setCurrentHint(null); }} style={{
           padding: "8px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, transition: "all 0.15s",
           background: mode === "freeplay" ? CL.primary : "transparent", color: mode === "freeplay" ? "#fff" : CL.textDim,
         }}>Free Play</button>
         <button onClick={function () { setMode("practice"); setPracticePhase("select"); setCurrentHint(null); setRunning(false); }} style={{
           padding: "8px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, transition: "all 0.15s",
-          background: mode === "practice" ? "#a78bfa" : "transparent", color: mode === "practice" ? "#fff" : CL.textDim,
+          background: mode === "practice" ? CL.hint : "transparent", color: mode === "practice" ? "#fff" : CL.textDim,
         }}>Practice Zone</button>
       </div>
 
@@ -1471,7 +1490,7 @@ function SudokuTrainer() {
                 color: CL.textDim, cursor: "pointer", fontSize: 12, fontWeight: 600,
               }}>Back</button>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "#a78bfa" }}>{"Practice: " + practiceTech}</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: CL.hint }}>{"Practice: " + practiceTech}</div>
                 <div style={{ fontSize: 11, color: CL.textMuted }}>{"Find and apply the " + practiceTech + " pattern"}</div>
               </div>
             </div>
@@ -1496,7 +1515,7 @@ function SudokuTrainer() {
             </div>
           </div>
           {generating && (
-            <div style={{ textAlign: "center", padding: 20, color: "#a78bfa", fontSize: 14 }}>Generating puzzle with {practiceTech} pattern...</div>
+            <div style={{ textAlign: "center", padding: 20, color: CL.hint, fontSize: 14 }}>Generating puzzle with {practiceTech} pattern...</div>
           )}
           {!generating && practicePhase === "challenge" && !practiceShowHint && (
             <div style={{ display: "flex", gap: 8, marginTop: 10, justifyContent: "center" }}>
@@ -1515,7 +1534,7 @@ function SudokuTrainer() {
               <div style={{ fontSize: 12, fontWeight: 700, color: CL.hint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>{"Answer: " + (practiceHint ? practiceHint.type : "")}</div>
               <div style={{ fontSize: 13, color: CL.text, lineHeight: 1.5 }}>{practiceHint ? practiceHint.explanation : ""}</div>
               <button onClick={practiceApplyAndNext} style={{
-                marginTop: 10, padding: "8px 16px", background: "#a78bfa", color: "#fff", border: "none", borderRadius: 8,
+                marginTop: 10, padding: "8px 16px", background: CL.hint, color: "#fff", border: "none", borderRadius: 8,
                 cursor: "pointer", fontSize: 12, fontWeight: 600,
               }}>Apply and Next Challenge</button>
             </div>
@@ -1535,7 +1554,7 @@ function SudokuTrainer() {
       <div style={{ display: "flex", gap: 20, flexWrap: "wrap", justifyContent: "center", alignItems: "flex-start", maxWidth: 880, width: "100%" }}>
         <div>
           {/* BOARD */}
-          <div style={{ display: "inline-grid", gridTemplateColumns: "repeat(9,1fr)", gap: 0, border: "2.5px solid " + CL.borderThick, borderRadius: 10, overflow: "hidden", background: CL.border }}>
+          <div style={{ display: "inline-grid", gridTemplateColumns: "repeat(9,1fr)", gap: 0, border: "1.5px solid " + CL.borderThick, borderRadius: 14, overflow: "hidden", background: CL.border, boxShadow: "0 1px 2px rgba(24,24,27,0.04), 0 8px 24px -8px rgba(24,24,27,0.08)" }}>
             {board.map(function (row, r) {
               return row.map(function (val, c) {
                 var isGiven = puzzle[r][c] !== 0;
